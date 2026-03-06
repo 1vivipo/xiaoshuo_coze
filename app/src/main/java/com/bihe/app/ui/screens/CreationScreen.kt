@@ -17,8 +17,6 @@ import com.bihe.app.data.model.Project
 import com.bihe.app.data.model.ProjectType
 import com.bihe.app.ui.viewmodel.CreationViewModel
 
-import kotlinx.coroutines.launch
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreationScreen(
@@ -75,9 +73,7 @@ fun CreationScreen(
     if (showCreateDialog) {
         CreateProjectDialog(
             onDismiss = { viewModel.hideCreateDialog() },
-            onCreate = { name, type ->
-                viewModel.createProject(name, type)
-            }
+            onCreate = { name, type -> viewModel.createProject(name, type) }
         )
     }
     
@@ -89,19 +85,20 @@ fun CreationScreen(
                 viewModel.clearSelectedProject()
                 onNavigateToEditor(project.id)
             },
-            onManageOutline = { /* TODO */ },
-            onManageCharacters = { /* TODO */ },
-            onManageWorldSetting = { /* TODO */ },
             onDelete = { viewModel.deleteProject(project) }
         )
     }
 }
 
 @Composable
-fun ProjectCard(
-    project: Project,
-    onClick: () -> Unit
-) {
+fun ProjectCard(project: Project, onClick: () -> Unit) {
+    val typeText = when (project.type) {
+        ProjectType.NOVEL -> "小说"
+        ProjectType.SHORT_DRAMA -> "短剧"
+        ProjectType.COMIC_DRAMA -> "漫剧"
+        ProjectType.PROMO_COPY -> "推文"
+    }
+    
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -109,7 +106,7 @@ fun ProjectCard(
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(text = project.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                AssistChip(onClick = {}, label = { Text(when (project.type) { ProjectType.NOVEL -> "小说" ProjectType.SHORT_DRAMA -> "短剧" ProjectType.COMIC_DRAMA -> "漫剧" ProjectType.PROMO_COPY -> "推文" }) }, modifier = Modifier.height(28.dp))
+                AssistChip(onClick = {}, label = { Text(typeText) }, modifier = Modifier.height(28.dp))
             }
             Spacer(modifier = Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -117,17 +114,17 @@ fun ProjectCard(
                 Text(text = "${project.chapterCount} 章", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(modifier = Modifier.height(8.dp))
-            LinearProgressIndicator(progress = if (project.totalWordGoal > 0) (project.wordCount.toFloat() / project.totalWordGoal).coerceIn(0f, 1f) else 0f, modifier = Modifier.fillMaxWidth())
+            LinearProgressIndicator(
+                progress = if (project.totalWordGoal > 0) (project.wordCount.toFloat() / project.totalWordGoal).coerceIn(0f, 1f) else 0f,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateProjectDialog(
-    onDismiss: () -> Unit,
-    onCreate: (String, ProjectType) -> Unit
-) {
+fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, ProjectType) -> Unit) {
     var name by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(ProjectType.NOVEL) }
     
@@ -141,10 +138,16 @@ fun CreateProjectDialog(
                 Text("项目类型", style = MaterialTheme.typography.labelMedium)
                 Spacer(modifier = Modifier.height(8.dp))
                 ProjectType.values().forEach { type ->
+                    val typeLabel = when (type) {
+                        ProjectType.NOVEL -> "小说"
+                        ProjectType.SHORT_DRAMA -> "短剧剧本"
+                        ProjectType.COMIC_DRAMA -> "漫剧剧本"
+                        ProjectType.PROMO_COPY -> "推文文案"
+                    }
                     Row(modifier = Modifier.fillMaxWidth().clickable { selectedType = type }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = selectedType == type, onClick = { selectedType = type })
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(when (type) { ProjectType.NOVEL -> "小说" ProjectType.SHORT_DRAMA -> "短剧剧本" ProjectType.COMIC_DRAMA -> "漫剧剧本" ProjectType.PROMO_COPY -> "推文文案" })
+                        Text(typeLabel)
                     }
                 }
             }
@@ -156,33 +159,33 @@ fun CreateProjectDialog(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProjectDetailSheet(
-    project: Project,
-    onDismiss: () -> Unit,
-    onWrite: () -> Unit,
-    onManageOutline: () -> Unit,
-    onManageCharacters: () -> Unit,
-    onManageWorldSetting: () -> Unit,
-    onDelete: () -> Unit
-) {
+fun ProjectDetailSheet(project: Project, onDismiss: () -> Unit, onWrite: () -> Unit, onDelete: () -> Unit) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val typeText = when (project.type) {
+        ProjectType.NOVEL -> "小说"
+        ProjectType.SHORT_DRAMA -> "短剧"
+        ProjectType.COMIC_DRAMA -> "漫剧"
+        ProjectType.PROMO_COPY -> "推文"
+    }
     
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Text(text = project.name, style = MaterialTheme.typography.headlineSmall)
-            Text(text = when (project.type) { ProjectType.NOVEL -> "小说" ProjectType.SHORT_DRAMA -> "短剧" ProjectType.COMIC_DRAMA -> "漫剧" ProjectType.PROMO_COPY -> "推文" }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = typeText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 Button(onClick = onWrite) { Icon(Icons.Default.Edit, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("开始写作") }
-                OutlinedButton(onClick = onManageOutline) { Icon(Icons.Default.List, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("大纲") }
+                OutlinedButton(onClick = { }) { Icon(Icons.Default.List, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("大纲") }
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                OutlinedButton(onClick = onManageCharacters) { Icon(Icons.Default.Person, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("人物") }
-                OutlinedButton(onClick = onManageWorldSetting) { Icon(Icons.Default.Public, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("世界观") }
+                OutlinedButton(onClick = { }) { Icon(Icons.Default.Person, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("人物") }
+                OutlinedButton(onClick = { }) { Icon(Icons.Default.Public, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("世界观") }
             }
             Spacer(modifier = Modifier.height(24.dp))
-            OutlinedButton(onClick = { showDeleteConfirm = true }, colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Icon(Icons.Default.Delete, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("删除项目") }
+            OutlinedButton(onClick = { showDeleteConfirm = true }, colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { 
+                Icon(Icons.Default.Delete, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("删除项目") 
+            }
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
