@@ -14,6 +14,7 @@ import com.bihe.app.domain.ai.DeepSeekService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 
 class WritingService : Service() {
     

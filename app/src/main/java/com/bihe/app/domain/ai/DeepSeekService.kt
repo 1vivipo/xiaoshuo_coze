@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 data class DeepSeekRequest(
     val model: String = "deepseek-chat",
     val messages: List<Message>,
-    val temperature: Float = 0.7,
+    val temperature: Float = 0.7f,
     val max_tokens: Int = 4096,
     val stream: Boolean = false
 )
@@ -81,7 +81,7 @@ class DeepSeekService(private var apiKey: String, private var baseUrl: String = 
     suspend fun chat(
         messages: List<Message>,
         model: String = "deepseek-chat",
-        temperature: Float = 0.7,
+        temperature: Float = 0.7f,
         maxTokens: Int = 4096
     ): Result<String> {
         return try {
