@@ -38,7 +38,7 @@ fun EditorScreen(
     
     var content by remember(currentChapter?.content ?: "") { mutableStateOf(currentChapter?.content ?: "") }
     
-    LaunchedEffect(chapterId) {
+    LaunchedEffect(projectId) {
         viewModel.loadProject(projectId, chapterId)
     }
     
@@ -64,17 +64,14 @@ fun EditorScreen(
         floatingActionButton = {
             if (currentChapter != null && !isWriting) {
                 ExtendedFloatingActionButton(
-                    onClick = { 
-                        viewModel.startAIWriting(content)
-                    },
+                    onClick = { viewModel.startAIWriting(content) },
                     icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
                     text = { Text("AI续写") }
                 )
             }
         }
     ) { paddingValues ->
-        Column(modifier = Modifier.fillMaxSize()) {
-            // 进度条
+        Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             if (isWriting) {
                 LinearProgressIndicator(
                     progress = writingProgress / 100f,
@@ -87,10 +84,9 @@ fun EditorScreen(
                 )
             }
             
-            // 编辑器
             BasicTextField(
                 value = content,
-                onValueChange = { 
+                onValueChange = {
                     content = it
                     viewModel.updateContent(it)
                 },
@@ -117,7 +113,6 @@ fun EditorScreen(
                 }
             )
             
-            // 字数统计
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 tonalElevation = 2.dp
@@ -135,48 +130,45 @@ fun EditorScreen(
         }
     }
     
-    // 章节列表
     if (showChapterList) {
         ModalBottomSheet(onDismissRequest = { showChapterList = false }) {
-                LazyColumn(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                    item {
-                        Text("章节列表", style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-                    items(chapters) { chapter ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            onClick = {
-                                viewModel.selectChapter(chapter)
-                                showChapterList = false
-                            }
+            LazyColumn(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                item {
+                    Text("章节列表", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                items(chapters) { chapter ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        onClick = {
+                            viewModel.selectChapter(chapter)
+                            showChapterList = false
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(chapter.title)
-                                Text("${chapter.wordCount}字", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                            Text(chapter.title)
+                            Text("${chapter.wordCount}字", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    item {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = { showNewChapterDialog = true },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("新建章节")
-                        }
+                }
+                item {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { showNewChapterDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("新建章节")
                     }
                 }
             }
         }
     }
     
-    // 新建章节对话框
     if (showNewChapterDialog) {
         var newChapterTitle by remember { mutableStateOf("") }
         AlertDialog(
@@ -211,7 +203,6 @@ fun EditorScreen(
         )
     }
     
-    // AI设置
     if (showAISettings) {
         var apiKey by remember { mutableStateOf(viewModel.getApiKey()) }
         var targetWords by remember { mutableStateOf(2000) }

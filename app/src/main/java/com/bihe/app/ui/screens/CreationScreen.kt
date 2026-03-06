@@ -17,6 +17,8 @@ import com.bihe.app.data.model.Project
 import com.bihe.app.data.model.ProjectType
 import com.bihe.app.ui.viewmodel.CreationViewModel
 
+import kotlinx.coroutines.launch
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreationScreen(
@@ -56,27 +58,16 @@ fun CreationScreen(
             Tab(selected = selectedType == ProjectType.PROMO_COPY, onClick = { viewModel.filterByType(ProjectType.PROMO_COPY) }, text = { Text("推文") })
         }
         
-        if (projects.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("还没有项目", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.outline)
-                    Text("点击右上角 + 创建新项目", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(projects, key = { it.id }) { project ->
-                    ProjectCard(
-                        project = project,
-                        onClick = { viewModel.selectProject(project) }
-                    )
-                }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(projects) { project ->
+                ProjectCard(
+                    project = project,
+                    onClick = { viewModel.selectProject(project) }
+                )
             }
         }
     }
@@ -84,8 +75,8 @@ fun CreationScreen(
     if (showCreateDialog) {
         CreateProjectDialog(
             onDismiss = { viewModel.hideCreateDialog() },
-            onCreate = { name, type, wordGoal ->
-                viewModel.createProject(name, type, wordGoal)
+            onCreate = { name, type ->
+                viewModel.createProject(name, type)
             }
         )
     }
@@ -93,10 +84,10 @@ fun CreationScreen(
     selectedProject?.let { project ->
         ProjectDetailSheet(
             project = project,
-            onDismiss = { viewModel.unselectProject() },
-            onWrite = { 
-                viewModel.unselectProject()
-                onNavigateToEditor(project.id) 
+            onDismiss = { viewModel.clearSelectedProject() },
+            onWrite = {
+                viewModel.clearSelectedProject()
+                onNavigateToEditor(project.id)
             },
             onManageOutline = { /* TODO */ },
             onManageCharacters = { /* TODO */ },
@@ -107,19 +98,18 @@ fun CreationScreen(
 }
 
 @Composable
-fun ProjectCard(project: Project, onClick: () -> Unit) {
+fun ProjectCard(
+    project: Project,
+    onClick: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(text = project.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                AssistChip(
-                    onClick = {},
-                    label = { Text(when (project.type) { ProjectType.NOVEL -> "小说" ProjectType.SHORT_DRAMA -> "短剧" ProjectType.COMIC_DRAMA -> "漫剧" ProjectType.PROMO_COPY -> "推文" }) },
-                    modifier = Modifier.height(28.dp)
-                )
+                Text(text = project.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                AssistChip(onClick = {}, label = { Text(when (project.type) { ProjectType.NOVEL -> "小说" ProjectType.SHORT_DRAMA -> "短剧" ProjectType.COMIC_DRAMA -> "漫剧" ProjectType.PROMO_COPY -> "推文" }) }, modifier = Modifier.height(28.dp))
             }
             Spacer(modifier = Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -127,20 +117,19 @@ fun ProjectCard(project: Project, onClick: () -> Unit) {
                 Text(text = "${project.chapterCount} 章", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(modifier = Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = if (project.totalWordGoal > 0) (project.wordCount.toFloat() / project.totalWordGoal).coerceIn(0f, 1f) else 0f,
-                modifier = Modifier.fillMaxWidth()
-            )
+            LinearProgressIndicator(progress = if (project.totalWordGoal > 0) (project.wordCount.toFloat() / project.totalWordGoal).coerceIn(0f, 1f) else 0f, modifier = Modifier.fillMaxWidth())
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, ProjectType, Int) -> Unit) {
+fun CreateProjectDialog(
+    onDismiss: () -> Unit,
+    onCreate: (String, ProjectType) -> Unit
+) {
     var name by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(ProjectType.NOVEL) }
-    var wordGoal by remember { mutableStateOf("100000") }
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -158,11 +147,9 @@ fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, ProjectType, I
                         Text(when (type) { ProjectType.NOVEL -> "小说" ProjectType.SHORT_DRAMA -> "短剧剧本" ProjectType.COMIC_DRAMA -> "漫剧剧本" ProjectType.PROMO_COPY -> "推文文案" })
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(value = wordGoal, onValueChange = { wordGoal = it.filter { c -> c.isDigit() } }, label = { Text("目标字数") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             }
         },
-        confirmButton = { TextButton(onClick = { onCreate(name, selectedType, wordGoal.toIntOrNull() ?: 100000) }, enabled = name.isNotBlank()) { Text("创建") } },
+        confirmButton = { TextButton(onClick = { if (name.isNotBlank()) onCreate(name, selectedType) }, enabled = name.isNotBlank()) { Text("创建") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
 }
@@ -195,9 +182,7 @@ fun ProjectDetailSheet(
                 OutlinedButton(onClick = onManageWorldSetting) { Icon(Icons.Default.Public, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("世界观") }
             }
             Spacer(modifier = Modifier.height(24.dp))
-            OutlinedButton(onClick = { showDeleteConfirm = true }, colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                Icon(Icons.Default.Delete, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("删除项目")
-            }
+            OutlinedButton(onClick = { showDeleteConfirm = true }, colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Icon(Icons.Default.Delete, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("删除项目") }
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
