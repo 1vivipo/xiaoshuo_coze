@@ -56,12 +56,38 @@ fun MainScreen() {
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             when (selectedTab) {
-                0 -> CreationScreen()
+                0 -> CreationScreen(
+                    onNavigateToEditor = { projectId -> 
+                        navController.navigate("editor/$projectId")
+                    }
+                )
                 1 -> DramaScreen()
                 2 -> PromoScreen()
                 3 -> ModelScreen()
                 4 -> SettingsScreen()
             }
+        }
+    }
+}
+
+    NavHost(
+        navController = navController,
+        startDestination = "creation",
+        modifier = Modifier.fillMaxSize()
+    ) {
+        composable("creation") {
+            CreationScreen(
+                onNavigateToEditor = { projectId -> 
+                    navController.navigate("editor/$projectId")
+                }
+            )
+        }
+        composable("editor/{projectId}") { backStackEntry ->
+            val projectId = backStackEntry?.arguments?.get("projectId")?.toString()?.toLongOrNull ?: 0L
+            EditorScreen(
+                projectId = projectId,
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 }

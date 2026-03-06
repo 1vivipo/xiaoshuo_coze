@@ -12,43 +12,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bihe.app.data.model.Project
 import com.bihe.app.data.model.ProjectType
+import com.bihe.app.ui.viewmodel.CreationViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreationScreen() {
-    var selectedType by remember { mutableStateOf<ProjectType?>(null) }
-    var showCreateDialog by remember { mutableStateOf(false) }
-    var selectedProject by remember { mutableStateOf<Project?>(null) }
-    
-    // 模拟数据
-    val projects = remember {
-        mutableStateListOf(
-            Project(name = "都市修仙录", type = ProjectType.NOVEL, totalWordGoal = 1000000),
-            Project(name = "霸道总裁爱上我", type = ProjectType.SHORT_DRAMA, totalWordGoal = 50000),
-            Project(name = "玄幻世界", type = ProjectType.NOVEL, totalWordGoal = 2000000)
-        )
-    }
-    
-    val filteredProjects = if (selectedType != null) {
-        projects.filter { it.type == selectedType }
-    } else {
-        projects.toList()
-    }
+fun CreationScreen(
+    onNavigateToEditor: (Long) -> Unit = {},
+    viewModel: CreationViewModel = viewModel()
+) {
+    val projects by viewModel.projects.collectAsState()
+    val selectedType by viewModel.selectedType.collectAsState()
+    val showCreateDialog by viewModel.showCreateDialog.collectAsState()
+    val selectedProject by viewModel.selectedProject.collectAsState()
     
     Column(modifier = Modifier.fillMaxSize()) {
-        // 顶部栏
         TopAppBar(
             title = { Text("创作中枢") },
             actions = {
-                IconButton(onClick = { showCreateDialog = true }) {
+                IconButton(onClick = { viewModel.showCreateDialog() }) {
                     Icon(Icons.Default.Add, contentDescription = "新建项目")
                 }
             }
         )
         
-        // 类型筛选
         ScrollableTabRow(
             selectedTabIndex = when (selectedType) {
                 null -> 0
@@ -60,134 +49,86 @@ fun CreationScreen() {
             },
             edgePadding = 16.dp
         ) {
-            Tab(
-                selected = selectedType == null,
-                onClick = { selectedType = null },
-                text = { Text("全部") }
-            )
-            Tab(
-                selected = selectedType == ProjectType.NOVEL,
-                onClick = { selectedType = ProjectType.NOVEL },
-                text = { Text("小说") }
-            )
-            Tab(
-                selected = selectedType == ProjectType.SHORT_DRAMA,
-                onClick = { selectedType = ProjectType.SHORT_DRAMA },
-                text = { Text("短剧") }
-            )
-            Tab(
-                selected = selectedType == ProjectType.COMIC_DRAMA,
-                onClick = { selectedType = ProjectType.COMIC_DRAMA },
-                text = { Text("漫剧") }
-            )
-            Tab(
-                selected = selectedType == ProjectType.PROMO_COPY,
-                onClick = { selectedType = ProjectType.PROMO_COPY },
-                text = { Text("推文") }
-            )
+            Tab(selected = selectedType == null, onClick = { viewModel.filterByType(null) }, text = { Text("全部") })
+            Tab(selected = selectedType == ProjectType.NOVEL, onClick = { viewModel.filterByType(ProjectType.NOVEL) }, text = { Text("小说") })
+            Tab(selected = selectedType == ProjectType.SHORT_DRAMA, onClick = { viewModel.filterByType(ProjectType.SHORT_DRAMA) }, text = { Text("短剧") })
+            Tab(selected = selectedType == ProjectType.COMIC_DRAMA, onClick = { viewModel.filterByType(ProjectType.COMIC_DRAMA) }, text = { Text("漫剧") })
+            Tab(selected = selectedType == ProjectType.PROMO_COPY, onClick = { viewModel.filterByType(ProjectType.PROMO_COPY) }, text = { Text("推文") })
         }
         
-        // 项目列表
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(filteredProjects) { project ->
-                ProjectCard(
-                    project = project,
-                    onClick = { selectedProject = project }
-                )
+        if (projects.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("还没有项目", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.outline)
+                    Text("点击右上角 + 创建新项目", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(projects, key = { it.id }) { project ->
+                    ProjectCard(
+                        project = project,
+                        onClick = { viewModel.selectProject(project) }
+                    )
+                }
             }
         }
     }
     
-    // 新建项目对话框
     if (showCreateDialog) {
         CreateProjectDialog(
-            onDismiss = { showCreateDialog = false },
-            onCreate = { name, type ->
-                projects.add(Project(name = name, type = type))
-                showCreateDialog = false
+            onDismiss = { viewModel.hideCreateDialog() },
+            onCreate = { name, type, wordGoal ->
+                viewModel.createProject(name, type, wordGoal)
             }
         )
     }
     
-    // 项目详情
     selectedProject?.let { project ->
         ProjectDetailSheet(
             project = project,
-            onDismiss = { selectedProject = null }
+            onDismiss = { viewModel.unselectProject() },
+            onWrite = { 
+                viewModel.unselectProject()
+                onNavigateToEditor(project.id) 
+            },
+            onManageOutline = { /* TODO */ },
+            onManageCharacters = { /* TODO */ },
+            onManageWorldSetting = { /* TODO */ },
+            onDelete = { viewModel.deleteProject(project) }
         )
     }
 }
 
 @Composable
-fun ProjectCard(
-    project: Project,
-    onClick: () -> Unit
-) {
+fun ProjectCard(project: Project, onClick: () -> Unit) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = project.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(text = project.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 AssistChip(
                     onClick = {},
-                    label = {
-                        Text(
-                            when (project.type) {
-                                ProjectType.NOVEL -> "小说"
-                                ProjectType.SHORT_DRAMA -> "短剧"
-                                ProjectType.COMIC_DRAMA -> "漫剧"
-                                ProjectType.PROMO_COPY -> "推文"
-                            }
-                        )
-                    },
+                    label = { Text(when (project.type) { ProjectType.NOVEL -> "小说" ProjectType.SHORT_DRAMA -> "短剧" ProjectType.COMIC_DRAMA -> "漫剧" ProjectType.PROMO_COPY -> "推文" }) },
                     modifier = Modifier.height(28.dp)
                 )
             }
-            
             Spacer(modifier = Modifier.height(8.dp))
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "${project.wordCount} / ${project.totalWordGoal} 字",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "${project.chapterCount} 章",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(text = "${project.wordCount} / ${project.totalWordGoal} 字", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(text = "${project.chapterCount} 章", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            
             Spacer(modifier = Modifier.height(8.dp))
-            
             LinearProgressIndicator(
-                progress = if (project.totalWordGoal > 0) {
-                    (project.wordCount.toFloat() / project.totalWordGoal).coerceIn(0f, 1f)
-                } else 0f,
+                progress = if (project.totalWordGoal > 0) (project.wordCount.toFloat() / project.totalWordGoal).coerceIn(0f, 1f) else 0f,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -196,69 +137,33 @@ fun ProjectCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateProjectDialog(
-    onDismiss: () -> Unit,
-    onCreate: (String, ProjectType) -> Unit
-) {
+fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, ProjectType, Int) -> Unit) {
     var name by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(ProjectType.NOVEL) }
+    var wordGoal by remember { mutableStateOf("100000") }
     
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("新建项目") },
         text = {
             Column {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("项目名称") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("项目名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(modifier = Modifier.height(16.dp))
-                
                 Text("项目类型", style = MaterialTheme.typography.labelMedium)
                 Spacer(modifier = Modifier.height(8.dp))
-                
                 ProjectType.values().forEach { type ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selectedType = type }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = selectedType == type,
-                            onClick = { selectedType = type }
-                        )
+                    Row(modifier = Modifier.fillMaxWidth().clickable { selectedType = type }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = selectedType == type, onClick = { selectedType = type })
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            when (type) {
-                                ProjectType.NOVEL -> "小说"
-                                ProjectType.SHORT_DRAMA -> "短剧剧本"
-                                ProjectType.COMIC_DRAMA -> "漫剧剧本"
-                                ProjectType.PROMO_COPY -> "推文文案"
-                            }
-                        )
+                        Text(when (type) { ProjectType.NOVEL -> "小说" ProjectType.SHORT_DRAMA -> "短剧剧本" ProjectType.COMIC_DRAMA -> "漫剧剧本" ProjectType.PROMO_COPY -> "推文文案" })
                     }
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(value = wordGoal, onValueChange = { wordGoal = it.filter { c -> c.isDigit() } }, label = { Text("目标字数") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             }
         },
-        confirmButton = {
-            TextButton(
-                onClick = { onCreate(name, selectedType) },
-                enabled = name.isNotBlank()
-            ) {
-                Text("创建")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        }
+        confirmButton = { TextButton(onClick = { onCreate(name, selectedType, wordGoal.toIntOrNull() ?: 100000) }, enabled = name.isNotBlank()) { Text("创建") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
 }
 
@@ -266,56 +171,44 @@ fun CreateProjectDialog(
 @Composable
 fun ProjectDetailSheet(
     project: Project,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onWrite: () -> Unit,
+    onManageOutline: () -> Unit,
+    onManageCharacters: () -> Unit,
+    onManageWorldSetting: () -> Unit,
+    onDelete: () -> Unit
 ) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Text(
-                text = project.name,
-                style = MaterialTheme.typography.headlineSmall
-            )
-            
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Text(text = project.name, style = MaterialTheme.typography.headlineSmall)
+            Text(text = when (project.type) { ProjectType.NOVEL -> "小说" ProjectType.SHORT_DRAMA -> "短剧" ProjectType.COMIC_DRAMA -> "漫剧" ProjectType.PROMO_COPY -> "推文" }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(16.dp))
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                Button(onClick = { /* 打开编辑器 */ }) {
-                    Icon(Icons.Default.Edit, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("开始写作")
-                }
-                OutlinedButton(onClick = { /* 打开大纲 */ }) {
-                    Icon(Icons.Default.List, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("大纲管理")
-                }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                Button(onClick = onWrite) { Icon(Icons.Default.Edit, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("开始写作") }
+                OutlinedButton(onClick = onManageOutline) { Icon(Icons.Default.List, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("大纲") }
             }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                OutlinedButton(onClick = { /* 打开人物设定 */ }) {
-                    Icon(Icons.Default.Person, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("人物设定")
-                }
-                OutlinedButton(onClick = { /* 打开世界观 */ }) {
-                    Icon(Icons.Default.Public, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("世界观")
-                }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                OutlinedButton(onClick = onManageCharacters) { Icon(Icons.Default.Person, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("人物") }
+                OutlinedButton(onClick = onManageWorldSetting) { Icon(Icons.Default.Public, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("世界观") }
             }
-            
+            Spacer(modifier = Modifier.height(24.dp))
+            OutlinedButton(onClick = { showDeleteConfirm = true }, colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+                Icon(Icons.Default.Delete, contentDescription = null); Spacer(modifier = Modifier.width(8.dp)); Text("删除项目")
+            }
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+    
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("确认删除") },
+            text = { Text("确定要删除「${project.name}」吗？此操作不可恢复。") },
+            confirmButton = { Button(onClick = { showDeleteConfirm = false; onDelete() }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("删除") } },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") } }
+        )
     }
 }
