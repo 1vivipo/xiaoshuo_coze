@@ -5,24 +5,27 @@ import com.bihe.app.data.model.*
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface ChapterDao {
-    @Query("SELECT * FROM chapters WHERE projectId = :projectId ORDER BY orderIndex")
-    fun getChaptersByProject(projectId: Long): Flow<List<Chapter>>
+interface ProjectDao {
+    @Query("SELECT * FROM projects ORDER BY updatedAt DESC")
+    fun getAllProjects(): Flow<List<Project>>
     
-    @Query("SELECT * FROM chapters WHERE id = :id")
-    suspend fun getChapterById(id: Long): Chapter?
+    @Query("SELECT * FROM projects WHERE id = :id")
+    suspend fun getProjectById(id: Long): Project?
+    
+    @Query("SELECT * FROM projects WHERE type = :type ORDER BY updatedAt DESC")
+    fun getProjectsByType(type: ProjectType): Flow<List<Project>>
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertChapter(chapter: Chapter): Long
+    suspend fun insertProject(project: Project): Long
     
     @Update
-    suspend fun updateChapter(chapter: Chapter)
+    suspend fun updateProject(project: Project)
     
     @Delete
-    suspend fun deleteChapter(chapter: Chapter)
+    suspend fun deleteProject(project: Project)
     
-    @Query("SELECT MAX(orderIndex) FROM chapters WHERE projectId = :projectId")
-    suspend fun getMaxOrderIndex(projectId: Long): Int?
+    @Query("UPDATE projects SET wordCount = (SELECT COALESCE(SUM(wordCount), 0) FROM chapters WHERE projectId = :projectId) WHERE id = :projectId")
+    suspend fun updateWordCount(projectId: Long)
 }
 
 @Dao
@@ -42,8 +45,8 @@ interface ChapterDao {
     @Delete
     suspend fun deleteChapter(chapter: Chapter)
     
-    @Query("SELECT MAX(orderIndex) FROM chapters WHERE projectId = :projectId")
-    suspend fun getMaxOrderIndex(projectId: Long): Int?
+    @Query("SELECT COALESCE(MAX(orderIndex), 0) FROM chapters WHERE projectId = :projectId")
+    suspend fun getMaxOrderIndex(projectId: Long): Int
 }
 
 @Dao

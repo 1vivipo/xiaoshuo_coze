@@ -25,7 +25,9 @@ class CreationViewModel : ViewModel() {
         .flatMapLatest { type ->
             database.projectDao().getAllProjects().map { list ->
                 if (type != null) list.filter { it.type == type } else list
+            }
         }
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     
     fun filterByType(type: ProjectType?) {
         _selectedType.value = type
@@ -49,23 +51,20 @@ class CreationViewModel : ViewModel() {
     
     fun createProject(name: String, type: ProjectType) {
         viewModelScope.launch {
-                val project = Project(
-                    name = name,
-                    type = type,
-                    totalWordGoal = if (type == ProjectType.NOVEL) 100000 else 50000
-                )
-                database.projectDao().insertProject(project)
-                _showCreateDialog.value = false
-            }
+            val project = Project(
+                name = name,
+                type = type,
+                totalWordGoal = if (type == ProjectType.NOVEL) 100000 else 50000
+            )
+            database.projectDao().insertProject(project)
+            _showCreateDialog.value = false
         }
     }
     
     fun deleteProject(project: Project) {
         viewModelScope.launch {
-                database.projectDao().deleteProject(project)
-                _selectedProject.value = null
-            }
+            database.projectDao().deleteProject(project)
+            _selectedProject.value = null
         }
-    }
     }
 }
