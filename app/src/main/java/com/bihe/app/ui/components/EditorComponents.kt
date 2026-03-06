@@ -144,6 +144,7 @@ fun OutlineItem(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CharacterCard(
     name: String,
@@ -194,7 +195,7 @@ fun WritingProgressBar(
         }
         Spacer(modifier = Modifier.height(4.dp))
         LinearProgressIndicator(
-            progress = { (current.toFloat() / target).coerceIn(0f, 1f) },
+            progress = (current.toFloat() / target).coerceIn(0f, 1f),
             modifier = Modifier.fillMaxWidth()
         )
     }

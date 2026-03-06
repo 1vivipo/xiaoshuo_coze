@@ -185,11 +185,9 @@ fun ProjectCard(
             Spacer(modifier = Modifier.height(8.dp))
             
             LinearProgressIndicator(
-                progress = { 
-                    if (project.totalWordGoal > 0) {
-                        (project.wordCount.toFloat() / project.totalWordGoal).coerceIn(0f, 1f)
-                    } else 0f
-                },
+                progress = if (project.totalWordGoal > 0) {
+                    (project.wordCount.toFloat() / project.totalWordGoal).coerceIn(0f, 1f)
+                } else 0f,
                 modifier = Modifier.fillMaxWidth()
             )
         }

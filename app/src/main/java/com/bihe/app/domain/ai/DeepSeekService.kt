@@ -119,7 +119,7 @@ class DeepSeekService(private var apiKey: String, private var baseUrl: String = 
     }
     
     private fun buildSystemPrompt(style: String): String {
-        return """你是一位专业的网文创作助手，擅长$style写作。
+        return """你是一位专业的网文创作助手，擅长${style}写作。
 你的任务是根据提供的大纲、人物设定、世界观设定，续写小说内容。
 要求：
 1. 保持人物性格一致，不崩人设
