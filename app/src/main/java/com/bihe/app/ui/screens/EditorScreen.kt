@@ -1,6 +1,8 @@
 package com.bihe.app.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -14,9 +16,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.bihe.app.data.model.Chapter
 import com.bihe.app.ui.viewmodel.EditorViewModel
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,7 +91,8 @@ fun EditorScreen(
                     viewModel.updateContent(it)
                 },
                 modifier = Modifier
-                    .fillMaxSize()
+                    .weight(1f)
+                    .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 enabled = !isWriting,
@@ -122,9 +123,7 @@ fun EditorScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("字数: ${content.length}")
-                    if (currentChapter != null) {
-                        Text("目标: ${currentChapter.wordCount}字")
-                    }
+                    currentChapter?.let { Text("目标: ${it.wordCount}字") }
                 }
             }
         }
@@ -132,37 +131,39 @@ fun EditorScreen(
     
     if (showChapterList) {
         ModalBottomSheet(onDismissRequest = { showChapterList = false }) {
-            LazyColumn(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                item {
-                    Text("章节列表", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-                items(chapters) { chapter ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        onClick = {
-                            viewModel.selectChapter(chapter)
-                            showChapterList = false
-                        }
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                Text("章节列表", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                LazyColumn {
+                    items(chapters) { chapter ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            onClick = {
+                                viewModel.selectChapter(chapter)
+                                showChapterList = false
+                            }
                         ) {
-                            Text(chapter.title)
-                            Text("${chapter.wordCount}字", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(chapter.title)
+                                Text("${chapter.wordCount}字", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
-                }
-                item {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = { showNewChapterDialog = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("新建章节")
+                    
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { showNewChapterDialog = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("新建章节")
+                        }
                     }
                 }
             }

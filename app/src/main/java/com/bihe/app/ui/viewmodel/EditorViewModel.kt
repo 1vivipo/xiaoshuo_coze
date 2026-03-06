@@ -44,7 +44,6 @@ class EditorViewModel : ViewModel() {
                 _currentChapter.value = chapterList.first()
             }
             
-            // 初始化DeepSeek服务
             val apiKey = BiHeApplication.instance.settingsRepository.apiKey.first()
             deepSeekService = DeepSeekService(apiKey)
         }
@@ -71,7 +70,7 @@ class EditorViewModel : ViewModel() {
     fun createChapter(title: String) {
         val proj = _project.value ?: return
         viewModelScope.launch {
-            val maxOrder = database.chapterDao().getMaxOrderIndex(proj.id) ?: 0
+            val maxOrder = database.chapterDao().getMaxOrderIndex(proj.id)
             val chapter = Chapter(
                 projectId = proj.id,
                 title = title,
@@ -96,13 +95,11 @@ class EditorViewModel : ViewModel() {
             _writingProgress.value = 0f
             
             try {
-                // 获取人物设定
                 val characters = database.characterDao()
                     .getCharactersByProject(proj.id)
                     .first()
                     .joinToString("\n") { "${it.name}：${it.description}" }
                 
-                // 获取世界观设定
                 val worldSettings = database.worldSettingDao()
                     .getWorldSettingsByProject(proj.id)
                     .first()
@@ -127,7 +124,7 @@ class EditorViewModel : ViewModel() {
                             totalContent += "\n$newContent"
                             updateContent(totalContent)
                         },
-                        onFailure = { error ->
+                        onFailure = {
                             _isWriting.value = false
                             return@launch
                         }
@@ -144,7 +141,11 @@ class EditorViewModel : ViewModel() {
     }
     
     fun getApiKey(): String {
-        return BiHeApplication.instance.settingsRepository.apiKey.first()
+        var key = ""
+        viewModelScope.launch {
+            key = BiHeApplication.instance.settingsRepository.apiKey.first()
+        }
+        return key
     }
     
     fun updateApiKey(key: String) {
