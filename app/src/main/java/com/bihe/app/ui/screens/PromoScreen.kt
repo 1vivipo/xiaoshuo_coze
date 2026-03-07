@@ -173,6 +173,7 @@ fun PromoScreen() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PromoProjectCard(
     project: Project,

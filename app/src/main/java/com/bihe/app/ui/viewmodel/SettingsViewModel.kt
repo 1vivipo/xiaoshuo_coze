@@ -34,7 +34,7 @@ class SettingsViewModel : ViewModel() {
     
     fun updateModel(model: String) {
         viewModelScope.launch {
-            settingsRepository.setModel(model)
+            settingsRepository.setModelName(model)
         }
     }
     
