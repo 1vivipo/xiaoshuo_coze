@@ -65,7 +65,7 @@ fun ModelScreen() {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("API Key")
                         Text(
-                            if (apiKey.isNotBlank()) "${apiKey.take(8)}...${apiKey.takeLast(4)}" else "未设置",
+                            if (apiKey.isNotBlank()) "${apiKey.take(8)}...${apiKey.takeLast(4)}" else "使用内置Key",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -111,6 +111,7 @@ fun ModelScreen() {
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
+                // 测试连接按钮
                 Button(
                     onClick = { viewModel.testConnection() },
                     modifier = Modifier.fillMaxWidth(),
@@ -126,13 +127,25 @@ fun ModelScreen() {
                         Icon(Icons.Default.Wifi, contentDescription = null)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("测试连接")
+                    Text(if (isLoading) "测试中..." else "测试连接")
                 }
                 
                 // 显示测试结果
                 success?.let { msg ->
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(msg, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(msg, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { viewModel.clearSuccess() }) {
+                                Icon(Icons.Default.Close, contentDescription = "关闭", modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -223,20 +236,6 @@ fun ModelScreen() {
                 
                 Spacer(modifier = Modifier.height(12.dp))
                 
-                // 其他模型占位
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text("添加其他GGUF模型", color = MaterialTheme.colorScheme.outline)
-                }
-                
-                Divider()
-                
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -304,7 +303,7 @@ fun ModelScreen() {
     
     // API Key对话框
     if (showApiKeyDialog) {
-        var newKey by remember { mutableStateOf(apiKey) }
+        var newKey by remember { mutableStateOf("") }
         var newUrl by remember { mutableStateOf(baseUrl) }
         
         AlertDialog(
@@ -312,10 +311,16 @@ fun ModelScreen() {
             title = { Text("设置API") },
             text = {
                 Column {
+                    Text(
+                        "留空使用内置API Key",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = newKey,
                         onValueChange = { newKey = it },
-                        label = { Text("API Key") },
+                        label = { Text("API Key (可选)") },
                         placeholder = { Text("sk-xxxxx") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -332,8 +337,8 @@ fun ModelScreen() {
             },
             confirmButton = {
                 Button(onClick = {
-                    viewModel.updateApiKey(newKey)
-                    viewModel.updateBaseUrl(newUrl)
+                    if (newKey.isNotBlank()) viewModel.updateApiKey(newKey)
+                    if (newUrl.isNotBlank()) viewModel.updateBaseUrl(newUrl)
                     showApiKeyDialog = false
                 }) {
                     Text("保存")

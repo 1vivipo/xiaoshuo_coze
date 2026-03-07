@@ -61,9 +61,10 @@ fun MainScreen() {
             composable("main") {
                 when (selectedTab) {
                     0 -> CreationScreen(
-                        onNavigateToEditor = { projectId ->
-                            navController.navigate("editor/$projectId")
-                        }
+                        onNavigateToEditor = { projectId -> navController.navigate("editor/$projectId") },
+                        onNavigateToOutline = { projectId -> navController.navigate("outline/$projectId") },
+                        onNavigateToCharacters = { projectId -> navController.navigate("characters/$projectId") },
+                        onNavigateToWorldSetting = { projectId -> navController.navigate("worldsetting/$projectId") }
                     )
                     1 -> DramaScreen()
                     2 -> PromoScreen()
@@ -74,6 +75,27 @@ fun MainScreen() {
             composable("editor/{projectId}") { backStackEntry ->
                 val projectId = backStackEntry.arguments?.getString("projectId")?.toLongOrNull() ?: 0L
                 EditorScreen(
+                    projectId = projectId,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable("outline/{projectId}") { backStackEntry ->
+                val projectId = backStackEntry.arguments?.getString("projectId")?.toLongOrNull() ?: 0L
+                OutlineScreen(
+                    projectId = projectId,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable("characters/{projectId}") { backStackEntry ->
+                val projectId = backStackEntry.arguments?.getString("projectId")?.toLongOrNull() ?: 0L
+                CharactersScreen(
+                    projectId = projectId,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable("worldsetting/{projectId}") { backStackEntry ->
+                val projectId = backStackEntry.arguments?.getString("projectId")?.toLongOrNull() ?: 0L
+                WorldSettingScreen(
                     projectId = projectId,
                     onBack = { navController.popBackStack() }
                 )

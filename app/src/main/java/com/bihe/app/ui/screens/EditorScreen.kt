@@ -38,6 +38,7 @@ fun EditorScreen(
     var showNewChapterDialog by remember { mutableStateOf(false) }
     var showAISettings by remember { mutableStateOf(false) }
     var editText by remember { mutableStateOf("") }
+    var showSuccess by remember { mutableStateOf(false) }
     
     // 加载项目
     LaunchedEffect(projectId) {
@@ -49,10 +50,10 @@ fun EditorScreen(
         editText = content
     }
     
-    // 显示错误
-    LaunchedEffect(error) {
-        error?.let {
-            // 可以显示Snackbar
+    // 显示成功提示
+    LaunchedEffect(isWriting) {
+        if (!isWriting && writingProgress > 0 && error == null) {
+            showSuccess = true
         }
     }
     
@@ -79,11 +80,7 @@ fun EditorScreen(
             if (currentChapter != null && !isWriting) {
                 ExtendedFloatingActionButton(
                     onClick = {
-                        if (viewModel.getApiKey().isBlank()) {
-                            showAISettings = true
-                        } else {
-                            viewModel.startAIWriting(editText)
-                        }
+                        viewModel.startAIWriting(editText)
                     },
                     icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
                     text = { Text("AI续写") }
@@ -117,6 +114,29 @@ fun EditorScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
+            }
+            
+            // 成功提示
+            if (showSuccess && !isWriting) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("AI续写完成！", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Spacer(modifier = Modifier.weight(1f))
+                        IconButton(onClick = { showSuccess = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "关闭")
+                        }
+                    }
+                }
             }
             
             // 错误提示
@@ -291,7 +311,6 @@ fun EditorScreen(
     // AI设置
     if (showAISettings) {
         var apiKey by remember { mutableStateOf(viewModel.getApiKey()) }
-        var baseUrl by remember { mutableStateOf("https://api.deepseek.com") }
         
         AlertDialog(
             onDismissRequest = { showAISettings = false },
@@ -299,7 +318,7 @@ fun EditorScreen(
             text = {
                 Column {
                     Text(
-                        "请输入DeepSeek API Key",
+                        "当前API Key已内置，可直接使用AI续写功能",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -307,31 +326,25 @@ fun EditorScreen(
                     OutlinedTextField(
                         value = apiKey,
                         onValueChange = { apiKey = it },
-                        label = { Text("API Key") },
+                        label = { Text("自定义API Key (可选)") },
                         placeholder = { Text("sk-xxxxx") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = baseUrl,
-                        onValueChange = { baseUrl = it },
-                        label = { Text("API地址") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "获取API Key: platform.deepseek.com",
+                        "留空使用内置API Key",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.updateApiKey(apiKey)
+                        if (apiKey.isNotBlank()) {
+                            viewModel.updateApiKey(apiKey)
+                        }
                         showAISettings = false
                     }
                 ) {

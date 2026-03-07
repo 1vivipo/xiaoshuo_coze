@@ -21,6 +21,9 @@ import com.bihe.app.ui.viewmodel.CreationViewModel
 @Composable
 fun CreationScreen(
     onNavigateToEditor: (Long) -> Unit = {},
+    onNavigateToOutline: (Long) -> Unit = {},
+    onNavigateToCharacters: (Long) -> Unit = {},
+    onNavigateToWorldSetting: (Long) -> Unit = {},
     viewModel: CreationViewModel = viewModel()
 ) {
     val projects by viewModel.projects.collectAsState()
@@ -32,8 +35,8 @@ fun CreationScreen(
     
     // 显示错误提示
     LaunchedEffect(error) {
-        if (error != null) {
-            // 这里可以显示 Snackbar
+        error?.let {
+            // 可以显示Snackbar
         }
     }
     
@@ -127,6 +130,18 @@ fun CreationScreen(
             onWrite = {
                 viewModel.clearSelectedProject()
                 onNavigateToEditor(project.id)
+            },
+            onOutline = {
+                viewModel.clearSelectedProject()
+                onNavigateToOutline(project.id)
+            },
+            onCharacters = {
+                viewModel.clearSelectedProject()
+                onNavigateToCharacters(project.id)
+            },
+            onWorldSetting = {
+                viewModel.clearSelectedProject()
+                onNavigateToWorldSetting(project.id)
             },
             onDelete = { viewModel.deleteProject(project) }
         )
@@ -275,6 +290,9 @@ fun ProjectDetailSheet(
     project: Project,
     onDismiss: () -> Unit,
     onWrite: () -> Unit,
+    onOutline: () -> Unit,
+    onCharacters: () -> Unit,
+    onWorldSetting: () -> Unit,
     onDelete: () -> Unit
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -303,43 +321,62 @@ fun ProjectDetailSheet(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
+            // 主要操作
+            Button(
+                onClick = {
+                    onDismiss()
+                    onWrite()
+                },
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Button(
-                    onClick = {
-                        onDismiss()
-                        onWrite()
-                    }
-                ) {
-                    Icon(Icons.Default.Edit, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("开始写作")
-                }
-                OutlinedButton(onClick = { /* TODO: 大纲 */ }) {
-                    Icon(Icons.Default.List, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("大纲")
-                }
+                Icon(Icons.Default.Edit, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("开始写作")
             }
             
             Spacer(modifier = Modifier.height(12.dp))
             
+            // 次要操作
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedButton(onClick = { /* TODO: 人物 */ }) {
-                    Icon(Icons.Default.Person, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        onDismiss()
+                        onOutline()
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("大纲")
+                }
+                OutlinedButton(
+                    onClick = {
+                        onDismiss()
+                        onCharacters()
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text("人物")
                 }
-                OutlinedButton(onClick = { /* TODO: 世界观 */ }) {
-                    Icon(Icons.Default.Public, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("世界观")
-                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            OutlinedButton(
+                onClick = {
+                    onDismiss()
+                    onWorldSetting()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("世界观")
             }
             
             Spacer(modifier = Modifier.height(24.dp))
