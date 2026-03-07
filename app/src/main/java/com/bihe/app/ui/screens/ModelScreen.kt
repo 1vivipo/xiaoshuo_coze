@@ -1,5 +1,6 @@
 package com.bihe.app.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -22,6 +23,9 @@ fun ModelScreen() {
     val model by viewModel.model.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
+    val success by viewModel.success.collectAsState()
+    val localModelStatus by viewModel.localModelStatus.collectAsState()
+    val downloadProgress by viewModel.downloadProgress.collectAsState()
     
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var showModelDialog by remember { mutableStateOf(false) }
@@ -49,58 +53,86 @@ fun ModelScreen() {
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 // API Key
-                ListItem(
-                    headlineContent = { Text("API Key") },
-                    supportingContent = { 
-                        Text(if (apiKey.isNotBlank()) "${apiKey.take(8)}...${apiKey.takeLast(4)}" else "未设置")
-                    },
-                    leadingContent = {
-                        Icon(Icons.Default.Key, contentDescription = null)
-                    },
-                    trailingContent = {
-                        IconButton(onClick = { showApiKeyDialog = true }) {
-                            Icon(Icons.Default.Edit, contentDescription = "编辑")
-                        }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showApiKeyDialog = true }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Key, contentDescription = null)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("API Key")
+                        Text(
+                            if (apiKey.isNotBlank()) "${apiKey.take(8)}...${apiKey.takeLast(4)}" else "未设置",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                )
+                    Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                }
                 
                 Divider()
                 
                 // API地址
-                ListItem(
-                    headlineContent = { Text("API地址") },
-                    supportingContent = { Text(baseUrl) },
-                    leadingContent = {
-                        Icon(Icons.Default.Cloud, contentDescription = null)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Cloud, contentDescription = null)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("API地址")
+                        Text(baseUrl, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                )
+                }
                 
                 Divider()
                 
                 // 模型选择
-                ListItem(
-                    headlineContent = { Text("模型") },
-                    supportingContent = { Text(model) },
-                    leadingContent = {
-                        Icon(Icons.Default.Psychology, contentDescription = null)
-                    },
-                    trailingContent = {
-                        IconButton(onClick = { showModelDialog = true }) {
-                            Icon(Icons.Default.Edit, contentDescription = "编辑")
-                        }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showModelDialog = true }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Psychology, contentDescription = null)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("模型")
+                        Text(model, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                )
+                    Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                }
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 Button(
                     onClick = { viewModel.testConnection() },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = apiKey.isNotBlank()
+                    enabled = !isLoading
                 ) {
-                    Icon(Icons.Default.Wifi, contentDescription = null)
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    } else {
+                        Icon(Icons.Default.Wifi, contentDescription = null)
+                    }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("测试连接")
+                }
+                
+                // 显示测试结果
+                success?.let { msg ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(msg, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -113,33 +145,115 @@ fun ModelScreen() {
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    "本地模型 (离线)",
+                    "本地模型 (离线可用)",
                     style = MaterialTheme.typography.titleMedium
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                ListItem(
-                    headlineContent = { Text("GGUF模型") },
-                    supportingContent = { Text("未下载") },
-                    leadingContent = {
-                        Icon(Icons.Default.Storage, contentDescription = null)
-                    },
-                    trailingContent = {
-                        IconButton(onClick = { viewModel.downloadLocalModel() }) {
-                            Icon(Icons.Default.Download, contentDescription = "下载")
+                // Dirty-Muse-Writer 模型
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Dirty-Muse-Writer-v01",
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    "Q2_K · 约1.5GB · 成人向写作模型",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            when (localModelStatus) {
+                                "not_downloaded" -> {
+                                    Button(onClick = { viewModel.downloadLocalModel() }) {
+                                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("下载")
+                                    }
+                                }
+                                "downloading" -> {
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text("${downloadProgress.toInt()}%", style = MaterialTheme.typography.labelMedium)
+                                        LinearProgressIndicator(
+                                            progress = downloadProgress / 100f,
+                                            modifier = Modifier.width(80.dp)
+                                        )
+                                    }
+                                }
+                                "downloaded" -> {
+                                    AssistChip(
+                                        onClick = {},
+                                        label = { Text("已下载") },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        }
+                                    )
+                                }
+                                else -> {
+                                    Text(localModelStatus, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                        
+                        if (localModelStatus == "downloading") {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = downloadProgress / 100f,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                "正在下载... ${downloadProgress.toInt()}%",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
-                )
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // 其他模型占位
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("添加其他GGUF模型", color = MaterialTheme.colorScheme.outline)
+                }
                 
                 Divider()
                 
-                ListItem(
-                    headlineContent = { Text("模型路径") },
-                    supportingContent = { Text("/data/local/models/") },
-                    leadingContent = {
-                        Icon(Icons.Default.Folder, contentDescription = null)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Folder, contentDescription = null)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text("模型存储路径")
+                        Text(
+                            "/data/data/com.bihe.app/models/",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                )
+                }
             }
         }
         
@@ -158,12 +272,30 @@ fun ModelScreen() {
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "1. 在线模型需要API Key，访问 platform.deepseek.com 获取\n" +
-                    "2. 本地模型可离线使用，但需要下载约2GB\n" +
-                    "3. 在线模型响应更快，本地模型隐私更好",
+                    "• 在线模型：需要网络，响应快，质量高\n" +
+                    "• 本地模型：离线可用，隐私保护，需下载\n" +
+                    "• Dirty-Muse-Writer：专为成人向写作优化的模型\n" +
+                    "• 下载后可在设置中切换使用",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+        
+        // 错误提示
+        error?.let { msg ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                modifier = Modifier.fillMaxWidth().padding(16.dp)
+            ) {
+                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(msg, color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { viewModel.clearError() }) {
+                        Icon(Icons.Default.Close, contentDescription = "关闭")
+                    }
+                }
             }
         }
         
@@ -246,29 +378,5 @@ fun ModelScreen() {
                 }
             }
         )
-    }
-    
-    // 错误提示
-    error?.let { msg ->
-        Snackbar(
-            modifier = Modifier.padding(16.dp),
-            action = {
-                TextButton(onClick = { viewModel.clearError() }) {
-                    Text("关闭")
-                }
-            }
-        ) {
-            Text(msg)
-        }
-    }
-    
-    // 加载中
-    if (isLoading) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator()
-        }
     }
 }

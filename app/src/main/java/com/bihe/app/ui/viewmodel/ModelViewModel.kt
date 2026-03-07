@@ -1,19 +1,32 @@
 package com.bihe.app.ui.viewmodel
 
+import android.app.DownloadManager
+import android.content.Context
+import android.database.Cursor
+import android.net.Uri
+import android.os.Environment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bihe.app.BiHeApplication
 import com.bihe.app.domain.ai.DeepSeekService
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.io.File
 
 class ModelViewModel : ViewModel() {
     
     companion object {
         private const val DEFAULT_API_KEY = "sk-632f27c66a4445e091a101b29da605f3"
         private const val DEFAULT_BASE_URL = "https://api.deepseek.com"
+        
+        // 本地模型信息
+        private const val LOCAL_MODEL_NAME = "Dirty-Muse-Writer-v01-Uncensored-Erotica-NSFW.Q2_K.gguf"
+        private const val LOCAL_MODEL_URL = "https://huggingface.co/TheDrummer/Dark-Muse-Writer-v01-GGUF/resolve/main/Dirty-Muse-Writer-v01-Uncensored-Erotica-NSFW.Q2_K.gguf"
+        private const val LOCAL_MODEL_SIZE = 1500000000L // 约1.5GB
     }
     
+    private val context by lazy { BiHeApplication.instance }
     private val settingsRepository by lazy { BiHeApplication.instance.settingsRepository }
     
     val apiKey: StateFlow<String> = settingsRepository.apiKey
@@ -34,15 +47,146 @@ class ModelViewModel : ViewModel() {
     private val _success = MutableStateFlow<String?>(null)
     val success: StateFlow<String?> = _success
     
+    private val _localModelStatus = MutableStateFlow("checking")
+    val localModelStatus: StateFlow<String> = _localModelStatus
+    
+    private val _downloadProgress = MutableStateFlow(0f)
+    val downloadProgress: StateFlow<Float> = _downloadProgress
+    
+    private var downloadId: Long = -1
+    
+    init {
+        checkLocalModel()
+    }
+    
+    private fun checkLocalModel() {
+        viewModelScope.launch {
+            try {
+                val modelDir = File(context.filesDir, "models")
+                val modelFile = File(modelDir, LOCAL_MODEL_NAME)
+                
+                if (modelFile.exists() && modelFile.length() > 100000000) { // 大于100MB认为下载完成
+                    _localModelStatus.value = "downloaded"
+                } else {
+                    _localModelStatus.value = "not_downloaded"
+                }
+            } catch (e: Exception) {
+                _localModelStatus.value = "not_downloaded"
+            }
+        }
+    }
+    
+    fun downloadLocalModel() {
+        viewModelScope.launch {
+            try {
+                _localModelStatus.value = "downloading"
+                _downloadProgress.value = 0f
+                _error.value = null
+                
+                // 创建模型目录
+                val modelDir = File(context.filesDir, "models")
+                if (!modelDir.exists()) {
+                    modelDir.mkdirs()
+                }
+                
+                // 使用DownloadManager下载
+                val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                
+                val request = DownloadManager.Request(Uri.parse(LOCAL_MODEL_URL))
+                    .setTitle("Dirty-Muse-Writer 模型")
+                    .setDescription("正在下载本地写作模型...")
+                    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, LOCAL_MODEL_NAME)
+                    .setAllowedOverMetered(true)
+                    .setAllowedOverRoaming(true)
+                
+                downloadId = downloadManager.enqueue(request)
+                
+                // 监控下载进度
+                monitorDownload(downloadManager)
+                
+            } catch (e: Exception) {
+                _error.value = "下载失败: ${e.message}"
+                _localModelStatus.value = "not_downloaded"
+            }
+        }
+    }
+    
+    private fun monitorDownload(downloadManager: DownloadManager) {
+        viewModelScope.launch {
+            var downloading = true
+            
+            while (downloading) {
+                val query = DownloadManager.Query().setFilterById(downloadId)
+                val cursor: Cursor = downloadManager.query(query)
+                
+                if (cursor.moveToFirst()) {
+                    val bytesDownloadedIndex = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                    val bytesTotalIndex = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+                    val statusIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                    
+                    if (bytesDownloadedIndex != -1 && bytesTotalIndex != -1) {
+                        val bytesDownloaded = cursor.getLong(bytesDownloadedIndex)
+                        val bytesTotal = cursor.getLong(bytesTotalIndex)
+                        
+                        if (bytesTotal > 0) {
+                            _downloadProgress.value = (bytesDownloaded * 100f / bytesTotal)
+                        }
+                    }
+                    
+                    if (statusIndex != -1) {
+                        val status = cursor.getInt(statusIndex)
+                        when (status) {
+                            DownloadManager.STATUS_SUCCESSFUL -> {
+                                downloading = false
+                                _downloadProgress.value = 100f
+                                _localModelStatus.value = "downloaded"
+                                _success.value = "模型下载完成！"
+                                
+                                // 移动文件到应用目录
+                                moveModelToAppDir()
+                            }
+                            DownloadManager.STATUS_FAILED -> {
+                                downloading = false
+                                _error.value = "下载失败"
+                                _localModelStatus.value = "not_downloaded"
+                            }
+                        }
+                    }
+                }
+                
+                cursor.close()
+                delay(500)
+            }
+        }
+    }
+    
+    private fun moveModelToAppDir() {
+        try {
+            val sourceFile = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), LOCAL_MODEL_NAME)
+            val modelDir = File(context.filesDir, "models")
+            if (!modelDir.exists()) modelDir.mkdirs()
+            
+            val destFile = File(modelDir, LOCAL_MODEL_NAME)
+            
+            if (sourceFile.exists()) {
+                sourceFile.copyTo(destFile, overwrite = true)
+                sourceFile.delete()
+            }
+        } catch (e: Exception) {
+            _error.value = "移动模型文件失败: ${e.message}"
+        }
+    }
+    
     fun updateApiKey(key: String) {
         viewModelScope.launch {
-            settingsRepository.setApiKey(key)
+            settingsRepository.setApiKey(key.ifBlank { DEFAULT_API_KEY })
         }
     }
     
     fun updateBaseUrl(url: String) {
         viewModelScope.launch {
-            settingsRepository.setBaseUrl(url)
+            settingsRepository.setBaseUrl(url.ifBlank { DEFAULT_BASE_URL })
         }
     }
     
@@ -87,12 +231,6 @@ class ModelViewModel : ViewModel() {
             } finally {
                 _isLoading.value = false
             }
-        }
-    }
-    
-    fun downloadLocalModel() {
-        viewModelScope.launch {
-            _error.value = "本地模型下载功能开发中..."
         }
     }
     
