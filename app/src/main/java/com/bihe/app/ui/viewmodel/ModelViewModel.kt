@@ -23,39 +23,40 @@ class ModelViewModel : ViewModel() {
     companion object {
         private const val TAG = "ModelViewModel"
         private const val DEFAULT_API_KEY = "sk-632f27c66a4445e091a101b29da605f3"
-        private const val DEFAULT_BASE_URL = "https://api.deepseek.com"
+        private const val DEFAULT_BASE_URL = "https://api.deepseek.com/"
     }
     
-    private val context by lazy { BiHeApplication.instance }
-    private val settingsRepository by lazy { BiHeApplication.instance.settingsRepository }
+    // 直接使用MutableStateFlow，不依赖Repository
+    private val _apiKey = MutableStateFlow(DEFAULT_API_KEY)
+    val apiKey: StateFlow<String> = _apiKey.asStateFlow()
     
-    val apiKey: StateFlow<String> = settingsRepository.apiKey
-        .stateIn(viewModelScope, SharingStarted.Lazily, DEFAULT_API_KEY)
+    private val _baseUrl = MutableStateFlow(DEFAULT_BASE_URL)
+    val baseUrl: StateFlow<String> = _baseUrl.asStateFlow()
     
-    val baseUrl: StateFlow<String> = settingsRepository.baseUrl
-        .stateIn(viewModelScope, SharingStarted.Lazily, DEFAULT_BASE_URL)
-    
-    val model: StateFlow<String> = settingsRepository.modelName
-        .stateIn(viewModelScope, SharingStarted.Lazily, "deepseek-chat")
+    private val _model = MutableStateFlow("deepseek-chat")
+    val model: StateFlow<String> = _model.asStateFlow()
     
     private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
     
     private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error
+    val error: StateFlow<String?> = _error.asStateFlow()
     
     private val _success = MutableStateFlow<String?>(null)
-    val success: StateFlow<String?> = _success
+    val success: StateFlow<String?> = _success.asStateFlow()
     
     private val _localModelStatus = MutableStateFlow("not_downloaded")
-    val localModelStatus: StateFlow<String> = _localModelStatus
+    val localModelStatus: StateFlow<String> = _localModelStatus.asStateFlow()
     
     private val _downloadProgress = MutableStateFlow(0f)
-    val downloadProgress: StateFlow<Float> = _downloadProgress
+    val downloadProgress: StateFlow<Float> = _downloadProgress.asStateFlow()
     
     private var downloadId: Long = -1
     
+    private val context: Context by lazy { BiHeApplication.instance }
+    
     init {
+        Log.d(TAG, "ModelViewModel 初始化")
         checkLocalModel()
     }
     
@@ -65,6 +66,7 @@ class ModelViewModel : ViewModel() {
                 val modelDir = File(context.filesDir, "models")
                 val files = modelDir.listFiles()?.filter { it.extension == "gguf" }
                 _localModelStatus.value = if (!files.isNullOrEmpty()) "downloaded" else "not_downloaded"
+                Log.d(TAG, "本地模型状态: ${_localModelStatus.value}")
             } catch (e: Exception) {
                 Log.e(TAG, "检查本地模型失败", e)
                 _localModelStatus.value = "not_downloaded"
@@ -72,7 +74,9 @@ class ModelViewModel : ViewModel() {
         }
     }
     
-    fun downloadLocalModel(modelUrl: String = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf") {
+    fun downloadLocalModel(modelUrl: String) {
+        Log.d(TAG, "开始下载模型: $modelUrl")
+        
         viewModelScope.launch {
             try {
                 _localModelStatus.value = "downloading"
@@ -93,6 +97,8 @@ class ModelViewModel : ViewModel() {
                     .setAllowedOverRoaming(true)
                 
                 downloadId = downloadManager.enqueue(request)
+                Log.d(TAG, "下载任务已加入队列: $downloadId")
+                
                 monitorDownload(downloadManager, fileName)
                 
             } catch (e: Exception) {
@@ -119,9 +125,7 @@ class ModelViewModel : ViewModel() {
                         val bytesTotalIndex = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
                         
                         if (statusIndex != -1) {
-                            val status = cursor.getInt(statusIndex)
-                            
-                            when (status) {
+                            when (cursor.getInt(statusIndex)) {
                                 DownloadManager.STATUS_RUNNING -> {
                                     if (bytesDownloadedIndex != -1 && bytesTotalIndex != -1) {
                                         val downloaded = cursor.getLong(bytesDownloadedIndex)
@@ -131,6 +135,7 @@ class ModelViewModel : ViewModel() {
                                             if (progress - lastProgress > 1f) {
                                                 lastProgress = progress
                                                 _downloadProgress.value = progress
+                                                Log.d(TAG, "下载进度: $progress%")
                                             }
                                         }
                                     }
@@ -145,9 +150,7 @@ class ModelViewModel : ViewModel() {
                                 }
                                 DownloadManager.STATUS_FAILED -> {
                                     downloading = false
-                                    val reasonIndex = cursor.getColumnIndex(DownloadManager.COLUMN_REASON)
-                                    val reason = if (reasonIndex != -1) cursor.getInt(reasonIndex) else -1
-                                    _error.value = "下载失败 (错误码: $reason)"
+                                    _error.value = "下载失败"
                                     _localModelStatus.value = "not_downloaded"
                                     Toast.makeText(context, "下载失败，请重试", Toast.LENGTH_LONG).show()
                                 }
@@ -184,45 +187,48 @@ class ModelViewModel : ViewModel() {
     }
     
     fun updateApiKey(key: String) {
-        viewModelScope.launch {
-            settingsRepository.setApiKey(key.ifBlank { DEFAULT_API_KEY })
-        }
+        _apiKey.value = key.ifBlank { DEFAULT_API_KEY }
+        Log.d(TAG, "API Key 已更新")
     }
     
     fun updateBaseUrl(url: String) {
-        viewModelScope.launch {
-            settingsRepository.setBaseUrl(url.ifBlank { DEFAULT_BASE_URL })
-        }
+        _baseUrl.value = url.ifBlank { DEFAULT_BASE_URL }
+        Log.d(TAG, "Base URL 已更新: ${_baseUrl.value}")
     }
     
     fun updateModel(model: String) {
-        viewModelScope.launch {
-            settingsRepository.setModelName(model)
-        }
+        _model.value = model
+        Log.d(TAG, "Model 已更新: $model")
     }
     
     fun testConnection() {
-        Log.d(TAG, "=== 开始测试连接 ===")
+        Log.d(TAG, "========== 开始测试连接 ==========")
+        
+        // 立即显示加载状态
+        _isLoading.value = true
+        _error.value = null
+        _success.value = null
+        
+        // 显示Toast
+        Toast.makeText(context, "正在测试连接...", Toast.LENGTH_SHORT).show()
         
         viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            _success.value = null
-            
-            Toast.makeText(context, "正在测试连接...", Toast.LENGTH_SHORT).show()
-            
             try {
-                val key = apiKey.value.ifBlank { DEFAULT_API_KEY }
-                val url = baseUrl.value.ifBlank { DEFAULT_BASE_URL }
+                val key = _apiKey.value.ifBlank { DEFAULT_API_KEY }
+                val url = _baseUrl.value.ifBlank { DEFAULT_BASE_URL }
                 
                 Log.d(TAG, "API Key: ${key.take(10)}...")
                 Log.d(TAG, "Base URL: $url")
-                Log.d(TAG, "开始网络请求...")
+                Log.d(TAG, "开始创建DeepSeek服务...")
                 
+                // 在IO线程执行网络请求
                 val result = withContext(Dispatchers.IO) {
                     try {
+                        Log.d(TAG, "IO线程: 创建DeepSeekService")
                         val service = DeepSeekService(key, url)
-                        service.chat(
+                        
+                        Log.d(TAG, "IO线程: 发送请求")
+                        val response = service.chat(
                             messages = listOf(
                                 com.bihe.app.domain.ai.Message(
                                     role = "user",
@@ -231,25 +237,28 @@ class ModelViewModel : ViewModel() {
                             ),
                             maxTokens = 20
                         )
+                        
+                        Log.d(TAG, "IO线程: 请求完成")
+                        response
                     } catch (e: Exception) {
-                        Log.e(TAG, "网络请求异常", e)
+                        Log.e(TAG, "IO线程: 请求异常", e)
                         Result.failure(e)
                     }
                 }
                 
-                Log.d(TAG, "网络请求完成")
+                Log.d(TAG, "回到主线程处理结果")
                 
                 result.fold(
                     onSuccess = { response ->
-                        Log.d(TAG, "成功: $response")
+                        Log.d(TAG, "成功! 响应: $response")
                         _success.value = "✅ 连接成功！响应: ${response.take(100)}"
                         Toast.makeText(context, "连接成功！", Toast.LENGTH_LONG).show()
                     },
                     onFailure = { e ->
                         Log.e(TAG, "失败: ${e.message}", e)
                         val errorMsg = when {
-                            e.message?.contains("Unable to resolve host") == true -> "网络错误：无法连接服务器，请检查网络"
-                            e.message?.contains("timeout") == true -> "网络超时，请重试"
+                            e.message?.contains("Unable to resolve host") == true -> "无法连接服务器，请检查网络"
+                            e.message?.contains("timeout") == true -> "连接超时，请重试"
                             e.message?.contains("401") == true -> "API Key无效"
                             e.message?.contains("402") == true -> "API余额不足"
                             else -> "连接失败: ${e.message}"
@@ -265,7 +274,7 @@ class ModelViewModel : ViewModel() {
                 Toast.makeText(context, "测试异常: ${e.message}", Toast.LENGTH_LONG).show()
             } finally {
                 _isLoading.value = false
-                Log.d(TAG, "=== 测试结束 ===")
+                Log.d(TAG, "========== 测试结束 ==========")
             }
         }
     }

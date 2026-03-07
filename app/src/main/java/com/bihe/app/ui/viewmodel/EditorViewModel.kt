@@ -1,5 +1,7 @@
 package com.bihe.app.ui.viewmodel
 
+import android.util.Log
+import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bihe.app.BiHeApplication
@@ -14,13 +16,13 @@ import kotlinx.coroutines.withContext
 class EditorViewModel : ViewModel() {
     
     companion object {
+        private const val TAG = "EditorViewModel"
         private const val DEFAULT_API_KEY = "sk-632f27c66a4445e091a101b29da605f3"
-        private const val DEFAULT_BASE_URL = "https://api.deepseek.com"
+        private const val DEFAULT_BASE_URL = "https://api.deepseek.com/"
     }
     
     private val database by lazy { BiHeApplication.instance.database }
-    private val settingsRepository by lazy { BiHeApplication.instance.settingsRepository }
-    private var deepSeekService: DeepSeekService? = null
+    private val context by lazy { BiHeApplication.instance }
     
     private val _project = MutableStateFlow<Project?>(null)
     val project: StateFlow<Project?> = _project
@@ -46,29 +48,26 @@ class EditorViewModel : ViewModel() {
     private val _content = MutableStateFlow("")
     val content: StateFlow<String> = _content
     
-    private var cachedApiKey: String = DEFAULT_API_KEY
-    private var cachedBaseUrl: String = DEFAULT_BASE_URL
+    private var deepSeekService: DeepSeekService? = null
     
     init {
-        deepSeekService = DeepSeekService(cachedApiKey, cachedBaseUrl)
+        Log.d(TAG, "EditorViewModel 初始化")
+        deepSeekService = DeepSeekService(DEFAULT_API_KEY, DEFAULT_BASE_URL)
     }
     
     fun loadProject(projectId: Long, chapterId: Long? = null) {
+        Log.d(TAG, "加载项目: $projectId")
+        
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                cachedApiKey = settingsRepository.apiKey.first().ifBlank { DEFAULT_API_KEY }
-                cachedBaseUrl = settingsRepository.baseUrl.first().ifBlank { DEFAULT_BASE_URL }
-                
-                if (deepSeekService == null) {
-                    deepSeekService = DeepSeekService(cachedApiKey, cachedBaseUrl)
-                }
-                
                 val proj = database.projectDao().getProjectById(projectId)
                 _project.value = proj
+                Log.d(TAG, "项目加载成功: ${proj?.name}")
                 
                 val chapterList = database.chapterDao().getChaptersByProject(projectId).first()
                 _chapters.value = chapterList
+                Log.d(TAG, "章节数: ${chapterList.size}")
                 
                 if (chapterId != null) {
                     val chapter = database.chapterDao().getChapterById(chapterId)
@@ -88,10 +87,12 @@ class EditorViewModel : ViewModel() {
                     _currentChapter.value = createdChapter
                     _chapters.value = listOf(createdChapter)
                     _content.value = ""
+                    Log.d(TAG, "创建第一章")
                 }
                 
                 _error.value = null
             } catch (e: Exception) {
+                Log.e(TAG, "加载失败", e)
                 _error.value = "加载失败: ${e.message}"
             } finally {
                 _isLoading.value = false
@@ -124,6 +125,7 @@ class EditorViewModel : ViewModel() {
                     wordCount = newContent.length
                 )
             } catch (e: Exception) {
+                Log.e(TAG, "保存失败", e)
                 _error.value = "保存失败: ${e.message}"
             }
         }
@@ -150,7 +152,9 @@ class EditorViewModel : ViewModel() {
                 _chapters.value = chapterList
                 
                 _error.value = null
+                Log.d(TAG, "创建章节: $title")
             } catch (e: Exception) {
+                Log.e(TAG, "创建章节失败", e)
                 _error.value = "创建章节失败: ${e.message}"
             } finally {
                 _isLoading.value = false
@@ -159,16 +163,19 @@ class EditorViewModel : ViewModel() {
     }
     
     fun startAIWriting(currentContent: String) {
+        Log.d(TAG, "开始AI续写")
+        
         val chapter = _currentChapter.value
         val proj = _project.value
         
         if (proj == null) {
             _error.value = "项目未加载"
+            Log.e(TAG, "项目未加载")
             return
         }
         
         if (deepSeekService == null) {
-            deepSeekService = DeepSeekService(cachedApiKey, cachedBaseUrl)
+            deepSeekService = DeepSeekService(DEFAULT_API_KEY, DEFAULT_BASE_URL)
         }
         
         val service = deepSeekService!!
@@ -177,6 +184,8 @@ class EditorViewModel : ViewModel() {
             _isWriting.value = true
             _writingProgress.value = 0f
             _error.value = null
+            
+            Toast.makeText(context, "开始AI续写...", Toast.LENGTH_SHORT).show()
             
             try {
                 val characters = try {
@@ -198,15 +207,18 @@ class EditorViewModel : ViewModel() {
                 }
                 
                 var totalContent = currentContent
-                val targetWords = 1000 // 减少目标字数，加快响应
+                val targetWords = 500
+                
+                Log.d(TAG, "目标字数: $targetWords")
                 
                 while (totalContent.length < targetWords && _isWriting.value) {
                     _writingProgress.value = (totalContent.length.toFloat() / targetWords) * 100
                     
-                    // 在IO线程执行网络请求
+                    Log.d(TAG, "发送续写请求...")
+                    
                     val result = withContext(Dispatchers.IO) {
                         service.continueWriting(
-                            context = if (totalContent.isNotBlank()) totalContent.takeLast(1500) else "请开始写一个精彩的小说开头，主角是一个普通人，突然获得了特殊能力。",
+                            context = if (totalContent.isNotBlank()) totalContent.takeLast(1500) else "请开始写一个精彩的小说开头。",
                             outline = chapter?.outline ?: "",
                             characters = characters,
                             worldSetting = worldSettings,
@@ -220,6 +232,7 @@ class EditorViewModel : ViewModel() {
                                 totalContent += if (totalContent.isNotBlank()) "\n\n$newContent" else newContent
                                 _content.value = totalContent
                                 updateContent(totalContent)
+                                Log.d(TAG, "续写成功，当前字数: ${totalContent.length}")
                             } else {
                                 _error.value = "AI返回空内容"
                                 _isWriting.value = false
@@ -227,8 +240,10 @@ class EditorViewModel : ViewModel() {
                             }
                         },
                         onFailure = { e ->
+                            Log.e(TAG, "续写失败", e)
                             _error.value = "AI续写失败: ${e.message}"
                             _isWriting.value = false
+                            Toast.makeText(context, "续写失败: ${e.message}", Toast.LENGTH_LONG).show()
                             return@launch
                         }
                     )
@@ -236,28 +251,30 @@ class EditorViewModel : ViewModel() {
                 
                 _writingProgress.value = 100f
                 _isWriting.value = false
+                Toast.makeText(context, "续写完成！", Toast.LENGTH_SHORT).show()
+                Log.d(TAG, "续写完成")
                 
             } catch (e: Exception) {
+                Log.e(TAG, "续写出错", e)
                 _error.value = "续写出错: ${e.message}"
                 _isWriting.value = false
+                Toast.makeText(context, "续写出错: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
     }
     
     fun stopWriting() {
         _isWriting.value = false
+        Log.d(TAG, "停止续写")
     }
     
     fun getApiKey(): String {
-        return cachedApiKey
+        return DEFAULT_API_KEY
     }
     
     fun updateApiKey(key: String) {
-        cachedApiKey = key.ifBlank { DEFAULT_API_KEY }
-        deepSeekService = DeepSeekService(cachedApiKey, cachedBaseUrl)
-        viewModelScope.launch {
-            settingsRepository.setApiKey(cachedApiKey)
-        }
+        deepSeekService = DeepSeekService(key.ifBlank { DEFAULT_API_KEY }, DEFAULT_BASE_URL)
+        Log.d(TAG, "API Key 已更新")
     }
     
     fun clearError() {

@@ -1,5 +1,6 @@
 package com.bihe.app.domain.ai
 
+import android.util.Log
 import com.google.gson.annotations.SerializedName
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -48,7 +49,26 @@ interface DeepSeekApi {
     suspend fun chatCompletion(@Body request: DeepSeekRequest): DeepSeekResponse
 }
 
-class DeepSeekService(private var apiKey: String, private var baseUrl: String = "https://api.deepseek.com") {
+class DeepSeekService(private var apiKey: String, baseUrl: String = "https://api.deepseek.com/") {
+    
+    companion object {
+        private const val TAG = "DeepSeekService"
+        const val DEFAULT_API_KEY = "sk-632f27c66a4445e091a101b29da605f3"
+        const val DEFAULT_BASE_URL = "https://api.deepseek.com/"
+        const val DEFAULT_MODEL = "deepseek-chat"
+    }
+    
+    private var baseUrl: String = baseUrl.ensureTrailingSlash()
+    
+    init {
+        Log.d(TAG, "DeepSeekService 初始化")
+        Log.d(TAG, "Base URL: ${this.baseUrl}")
+        Log.d(TAG, "API Key: ${apiKey.take(10)}...")
+    }
+    
+    private fun String.ensureTrailingSlash(): String {
+        return if (this.endsWith("/")) this else "$this/"
+    }
     
     private val client = OkHttpClient.Builder()
         .addInterceptor { chain ->
@@ -56,27 +76,32 @@ class DeepSeekService(private var apiKey: String, private var baseUrl: String = 
                 .addHeader("Authorization", "Bearer $apiKey")
                 .addHeader("Content-Type", "application/json")
                 .build()
+            Log.d(TAG, "请求: ${request.url}")
             chain.proceed(request)
         }
         .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
+            level = HttpLoggingInterceptor.Level.BODY
+        }.apply {
+            Log.d(TAG, "HttpLoggingInterceptor 已启用")
         })
         .connectTimeout(60, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
     
-    private var retrofit = createRetrofit()
-    
-    private fun createRetrofit(): Retrofit {
-        return Retrofit.Builder()
+    private val retrofit: Retrofit by lazy {
+        Log.d(TAG, "创建Retrofit实例")
+        Retrofit.Builder()
             .baseUrl(baseUrl)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
     }
     
-    private val api: DeepSeekApi by lazy { retrofit.create(DeepSeekApi::class.java) }
+    private val api: DeepSeekApi by lazy { 
+        Log.d(TAG, "创建API接口")
+        retrofit.create(DeepSeekApi::class.java) 
+    }
     
     suspend fun chat(
         messages: List<Message>,
@@ -84,6 +109,10 @@ class DeepSeekService(private var apiKey: String, private var baseUrl: String = 
         temperature: Float = 0.7f,
         maxTokens: Int = 4096
     ): Result<String> {
+        Log.d(TAG, "chat() 开始")
+        Log.d(TAG, "模型: $model")
+        Log.d(TAG, "消息数: ${messages.size}")
+        
         return try {
             val request = DeepSeekRequest(
                 model = model,
@@ -91,9 +120,14 @@ class DeepSeekService(private var apiKey: String, private var baseUrl: String = 
                 temperature = temperature,
                 max_tokens = maxTokens
             )
+            Log.d(TAG, "发送请求...")
             val response = api.chatCompletion(request)
-            Result.success(response.choices.firstOrNull()?.message?.content ?: "")
+            Log.d(TAG, "收到响应")
+            val content = response.choices.firstOrNull()?.message?.content ?: ""
+            Log.d(TAG, "响应内容: ${content.take(100)}...")
+            Result.success(content)
         } catch (e: Exception) {
+            Log.e(TAG, "请求失败", e)
             Result.failure(e)
         }
     }
@@ -106,6 +140,7 @@ class DeepSeekService(private var apiKey: String, private var baseUrl: String = 
         targetWords: Int = 2000,
         style: String = "网文风格"
     ): Result<String> {
+        Log.d(TAG, "continueWriting() 开始")
         val systemPrompt = buildSystemPrompt(style)
         val userPrompt = buildUserPrompt(context, outline, characters, worldSetting, targetWords)
         
@@ -160,16 +195,11 @@ class DeepSeekService(private var apiKey: String, private var baseUrl: String = 
     
     fun updateApiKey(newKey: String) {
         this.apiKey = newKey
+        Log.d(TAG, "API Key 已更新")
     }
     
     fun updateBaseUrl(newUrl: String) {
-        this.baseUrl = newUrl
-        this.retrofit = createRetrofit()
-    }
-    
-    companion object {
-        const val DEFAULT_API_KEY = "sk-632f27c66a4445e091a101b29da605f3"
-        const val DEFAULT_BASE_URL = "https://api.deepseek.com"
-        const val DEFAULT_MODEL = "deepseek-chat"
+        this.baseUrl = newUrl.ensureTrailingSlash()
+        Log.d(TAG, "Base URL 已更新: ${this.baseUrl}")
     }
 }
