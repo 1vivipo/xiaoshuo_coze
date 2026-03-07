@@ -13,6 +13,7 @@ class EditorViewModel : ViewModel() {
     
     private val database by lazy { BiHeApplication.instance.database }
     private var deepSeekService: DeepSeekService? = null
+    private var cachedApiKey: String = ""
     
     private val _project = MutableStateFlow<Project?>(null)
     val project: StateFlow<Project?> = _project
@@ -71,6 +72,7 @@ class EditorViewModel : ViewModel() {
                 
                 // 初始化DeepSeek服务
                 val apiKey = BiHeApplication.instance.settingsRepository.apiKey.first()
+                cachedApiKey = apiKey
                 deepSeekService = DeepSeekService(apiKey)
                 
                 _error.value = null
@@ -211,12 +213,17 @@ class EditorViewModel : ViewModel() {
     }
     
     fun getApiKey(): String {
-        return runCatching {
-            BiHeApplication.instance.settingsRepository.apiKey.first()
-        }.getOrElse { "" }
+        return cachedApiKey
+    }
+    
+    fun loadApiKey() {
+        viewModelScope.launch {
+            cachedApiKey = BiHeApplication.instance.settingsRepository.apiKey.first()
+        }
     }
     
     fun updateApiKey(key: String) {
+        cachedApiKey = key
         viewModelScope.launch {
             BiHeApplication.instance.settingsRepository.setApiKey(key)
             deepSeekService = DeepSeekService(key)
