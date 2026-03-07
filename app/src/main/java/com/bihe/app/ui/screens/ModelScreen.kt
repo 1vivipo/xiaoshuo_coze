@@ -14,6 +14,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bihe.app.ui.viewmodel.ModelViewModel
 
+data class LocalModel(
+    val name: String,
+    val size: String,
+    val description: String,
+    val url: String,
+    val isNsfw: Boolean = false,
+    val isChineseFriendly: Boolean = false
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModelScreen() {
@@ -29,6 +38,44 @@ fun ModelScreen() {
     
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var showModelDialog by remember { mutableStateOf(false) }
+    var selectedModel by remember { mutableStateOf<LocalModel?>(null) }
+    
+    // 可用的本地模型列表
+    val localModels = listOf(
+        LocalModel(
+            name = "Qwen2.5-1.5B",
+            size = "~1GB",
+            description = "中文友好，轻量快速",
+            url = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            isChineseFriendly = true
+        ),
+        LocalModel(
+            name = "Qwen2.5-3B",
+            size = "~2GB",
+            description = "中文友好，性能平衡",
+            url = "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
+            isChineseFriendly = true
+        ),
+        LocalModel(
+            name = "Phi-3.5-Mini",
+            size = "~2GB",
+            description = "多语言支持，快速响应",
+            url = "https://huggingface.co/microsoft/Phi-3.5-mini-instruct-gguf/resolve/main/Phi-3.5-mini-instruct-q4.gguf"
+        ),
+        LocalModel(
+            name = "Llama-3.2-3B",
+            size = "~2GB",
+            description = "创意写作，英文优秀",
+            url = "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+        ),
+        LocalModel(
+            name = "Dirty-Muse-Writer",
+            size = "~1.5GB",
+            description = "成人向写作专用",
+            url = "https://huggingface.co/TheDrummer/Dark-Muse-Writer-v01-GGUF/resolve/main/Dirty-Muse-Writer-v01-Uncensored-Erotica-NSFW.Q2_K.gguf",
+            isNsfw = true
+        )
+    )
     
     Column(
         modifier = Modifier
@@ -49,6 +96,12 @@ fun ModelScreen() {
                 Text(
                     "在线模型 (DeepSeek)",
                     style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "使用云端API，响应快速，质量高",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 
@@ -123,25 +176,51 @@ fun ModelScreen() {
                             strokeWidth = 2.dp,
                             color = MaterialTheme.colorScheme.onPrimary
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("测试中...")
                     } else {
                         Icon(Icons.Default.Wifi, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("测试连接")
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (isLoading) "测试中..." else "测试连接")
                 }
                 
-                // 显示测试结果
+                // 成功提示
                 success?.let { msg ->
                     Spacer(modifier = Modifier.height(12.dp))
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(msg, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.weight(1f))
                             IconButton(onClick = { viewModel.clearSuccess() }) {
+                                Icon(Icons.Default.Close, contentDescription = "关闭", modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+                
+                // 错误提示
+                error?.let { msg ->
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(msg, color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { viewModel.clearError() }) {
                                 Icon(Icons.Default.Close, contentDescription = "关闭", modifier = Modifier.size(16.dp))
                             }
                         }
@@ -161,96 +240,92 @@ fun ModelScreen() {
                     "本地模型 (离线可用)",
                     style = MaterialTheme.typography.titleMedium
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "下载后可离线使用，保护隐私",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // Dirty-Muse-Writer 模型
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "Dirty-Muse-Writer-v01",
-                                    style = MaterialTheme.typography.titleSmall
-                                )
-                                Text(
-                                    "Q2_K · 约1.5GB · 成人向写作模型",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            when (localModelStatus) {
-                                "not_downloaded" -> {
-                                    Button(onClick = { viewModel.downloadLocalModel() }) {
-                                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("下载")
-                                    }
-                                }
-                                "downloading" -> {
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text("${downloadProgress.toInt()}%", style = MaterialTheme.typography.labelMedium)
-                                        LinearProgressIndicator(
-                                            progress = downloadProgress / 100f,
-                                            modifier = Modifier.width(80.dp)
-                                        )
-                                    }
-                                }
-                                "downloaded" -> {
-                                    AssistChip(
-                                        onClick = {},
-                                        label = { Text("已下载") },
-                                        leadingIcon = {
-                                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        }
-                                    )
-                                }
-                                else -> {
-                                    Text(localModelStatus, style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                        }
-                        
-                        if (localModelStatus == "downloading") {
+                // 下载进度
+                if (localModelStatus == "downloading") {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("正在下载模型...", style = MaterialTheme.typography.titleSmall)
                             Spacer(modifier = Modifier.height(8.dp))
                             LinearProgressIndicator(
                                 progress = downloadProgress / 100f,
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Text(
-                                "正在下载... ${downloadProgress.toInt()}%",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                "${downloadProgress.toInt()}%",
+                                style = MaterialTheme.typography.bodySmall
                             )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                
+                // 模型列表
+                localModels.forEach { localModel ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        onClick = { selectedModel = localModel }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(localModel.name, style = MaterialTheme.typography.titleSmall)
+                                    if (localModel.isChineseFriendly) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        SuggestionChip(
+                                            onClick = {},
+                                            label = { Text("中文", style = MaterialTheme.typography.labelSmall) },
+                                            modifier = Modifier.height(20.dp)
+                                        )
+                                    }
+                                    if (localModel.isNsfw) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        SuggestionChip(
+                                            onClick = {},
+                                            label = { Text("18+", style = MaterialTheme.typography.labelSmall) },
+                                            colors = SuggestionChipDefaults.suggestionChipColors(
+                                                containerColor = MaterialTheme.colorScheme.errorContainer
+                                            ),
+                                            modifier = Modifier.height(20.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    "${localModel.size} · ${localModel.description}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Icon(Icons.Default.Download, contentDescription = "下载", tint = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Folder, contentDescription = null)
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
-                        Text("模型存储路径")
-                        Text(
-                            "/data/data/com.bihe.app/models/",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                if (localModelStatus == "downloaded") {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("已下载模型可用", color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -265,36 +340,16 @@ fun ModelScreen() {
                 .padding(horizontal = 16.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    "使用说明",
-                    style = MaterialTheme.typography.titleMedium
-                )
+                Text("使用说明", style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     "• 在线模型：需要网络，响应快，质量高\n" +
-                    "• 本地模型：离线可用，隐私保护，需下载\n" +
-                    "• Dirty-Muse-Writer：专为成人向写作优化的模型\n" +
-                    "• 下载后可在设置中切换使用",
+                    "• 本地模型：下载后可离线使用\n" +
+                    "• 中文友好：对中文支持更好\n" +
+                    "• 18+模型：支持成人向内容创作",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-        }
-        
-        // 错误提示
-        error?.let { msg ->
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                modifier = Modifier.fillMaxWidth().padding(16.dp)
-            ) {
-                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(msg, color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { viewModel.clearError() }) {
-                        Icon(Icons.Default.Close, contentDescription = "关闭")
-                    }
-                }
             }
         }
         
@@ -311,11 +366,7 @@ fun ModelScreen() {
             title = { Text("设置API") },
             text = {
                 Column {
-                    Text(
-                        "留空使用内置API Key",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("留空使用内置API Key", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = newKey,
@@ -359,18 +410,12 @@ fun ModelScreen() {
             title = { Text("选择模型") },
             text = {
                 Column {
-                    val models = listOf("deepseek-chat", "deepseek-coder")
-                    models.forEach { m ->
+                    listOf("deepseek-chat", "deepseek-coder").forEach { m ->
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(
-                                selected = model == m,
-                                onClick = { viewModel.updateModel(m) }
-                            )
+                            RadioButton(selected = model == m, onClick = { viewModel.updateModel(m) })
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(m)
                         }
@@ -380,6 +425,38 @@ fun ModelScreen() {
             confirmButton = {
                 TextButton(onClick = { showModelDialog = false }) {
                     Text("确定")
+                }
+            }
+        )
+    }
+    
+    // 下载确认对话框
+    selectedModel?.let { model ->
+        AlertDialog(
+            onDismissRequest = { selectedModel = null },
+            title = { Text("下载模型") },
+            text = {
+                Column {
+                    Text("即将下载: ${model.name}")
+                    Text("大小: ${model.size}")
+                    Text("说明: ${model.description}")
+                    if (model.isNsfw) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("⚠️ 此模型支持成人向内容", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.downloadLocalModel(model.url)
+                    selectedModel = null
+                }) {
+                    Text("开始下载")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { selectedModel = null }) {
+                    Text("取消")
                 }
             }
         )
