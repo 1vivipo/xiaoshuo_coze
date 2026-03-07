@@ -13,6 +13,11 @@ import kotlinx.coroutines.launch
 
 class DramaViewModel : ViewModel() {
     
+    companion object {
+        private const val DEFAULT_API_KEY = "sk-632f27c66a4445e091a101b29da605f3"
+        private const val DEFAULT_BASE_URL = "https://api.deepseek.com"
+    }
+    
     private val database by lazy { BiHeApplication.instance.database }
     private val settingsRepository by lazy { BiHeApplication.instance.settingsRepository }
     
@@ -29,6 +34,8 @@ class DramaViewModel : ViewModel() {
     private var deepSeekService: DeepSeekService? = null
     
     init {
+        // 立即初始化DeepSeek服务
+        deepSeekService = DeepSeekService(DEFAULT_API_KEY, DEFAULT_BASE_URL)
         loadDramaProject()
     }
     
@@ -46,9 +53,9 @@ class DramaViewModel : ViewModel() {
                     _episodes.value = episodeList
                 }
                 
-                // 初始化AI服务
-                val apiKey = settingsRepository.apiKey.first()
-                if (apiKey.isNotBlank()) {
+                // 确保AI服务已初始化
+                if (deepSeekService == null) {
+                    val apiKey = settingsRepository.apiKey.first().ifBlank { DEFAULT_API_KEY }
                     deepSeekService = DeepSeekService(apiKey)
                 }
                 

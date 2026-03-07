@@ -11,6 +11,11 @@ import kotlinx.coroutines.launch
 
 class EditorViewModel : ViewModel() {
     
+    companion object {
+        private const val DEFAULT_API_KEY = "sk-632f27c66a4445e091a101b29da605f3"
+        private const val DEFAULT_BASE_URL = "https://api.deepseek.com"
+    }
+    
     private val database by lazy { BiHeApplication.instance.database }
     private val settingsRepository by lazy { BiHeApplication.instance.settingsRepository }
     private var deepSeekService: DeepSeekService? = null
@@ -39,19 +44,24 @@ class EditorViewModel : ViewModel() {
     private val _content = MutableStateFlow("")
     val content: StateFlow<String> = _content
     
-    private var cachedApiKey: String = ""
-    private var cachedBaseUrl: String = "https://api.deepseek.com"
+    private var cachedApiKey: String = DEFAULT_API_KEY
+    private var cachedBaseUrl: String = DEFAULT_BASE_URL
+    
+    init {
+        // 立即初始化DeepSeek服务
+        deepSeekService = DeepSeekService(cachedApiKey, cachedBaseUrl)
+    }
     
     fun loadProject(projectId: Long, chapterId: Long? = null) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                // 加载设置
-                cachedApiKey = settingsRepository.apiKey.first()
-                cachedBaseUrl = settingsRepository.baseUrl.first()
+                // 加载设置（使用默认值作为fallback）
+                cachedApiKey = settingsRepository.apiKey.first().ifBlank { DEFAULT_API_KEY }
+                cachedBaseUrl = settingsRepository.baseUrl.first().ifBlank { DEFAULT_BASE_URL }
                 
-                // 初始化DeepSeek服务
-                if (cachedApiKey.isNotBlank()) {
+                // 确保DeepSeek服务已初始化
+                if (deepSeekService == null) {
                     deepSeekService = DeepSeekService(cachedApiKey, cachedBaseUrl)
                 }
                 
@@ -162,11 +172,6 @@ class EditorViewModel : ViewModel() {
             return
         }
         
-        if (cachedApiKey.isBlank()) {
-            _error.value = "请先在「我的」页面设置API Key"
-            return
-        }
-        
         // 确保服务已初始化
         if (deepSeekService == null) {
             deepSeekService = DeepSeekService(cachedApiKey, cachedBaseUrl)
@@ -207,7 +212,7 @@ class EditorViewModel : ViewModel() {
                     _writingProgress.value = (totalContent.length.toFloat() / targetWords) * 100
                     
                     val result = service.continueWriting(
-                        context = if (totalContent.isNotBlank()) totalContent.takeLast(2000) else "开始写作",
+                        context = if (totalContent.isNotBlank()) totalContent.takeLast(2000) else "开始写作，请续写一个精彩的小说开头",
                         outline = chapter?.outline ?: "",
                         characters = characters,
                         worldSetting = worldSettings,
@@ -247,10 +252,10 @@ class EditorViewModel : ViewModel() {
     }
     
     fun updateApiKey(key: String) {
-        cachedApiKey = key
-        deepSeekService = DeepSeekService(key, cachedBaseUrl)
+        cachedApiKey = key.ifBlank { DEFAULT_API_KEY }
+        deepSeekService = DeepSeekService(cachedApiKey, cachedBaseUrl)
         viewModelScope.launch {
-            settingsRepository.setApiKey(key)
+            settingsRepository.setApiKey(cachedApiKey)
         }
     }
     

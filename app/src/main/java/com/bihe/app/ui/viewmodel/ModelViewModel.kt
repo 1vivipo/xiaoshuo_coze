@@ -9,13 +9,18 @@ import kotlinx.coroutines.launch
 
 class ModelViewModel : ViewModel() {
     
+    companion object {
+        private const val DEFAULT_API_KEY = "sk-632f27c66a4445e091a101b29da605f3"
+        private const val DEFAULT_BASE_URL = "https://api.deepseek.com"
+    }
+    
     private val settingsRepository by lazy { BiHeApplication.instance.settingsRepository }
     
     val apiKey: StateFlow<String> = settingsRepository.apiKey
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DEFAULT_API_KEY)
     
     val baseUrl: StateFlow<String> = settingsRepository.baseUrl
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "https://api.deepseek.com")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DEFAULT_BASE_URL)
     
     val model: StateFlow<String> = settingsRepository.modelName
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "deepseek-chat")
@@ -54,13 +59,8 @@ class ModelViewModel : ViewModel() {
             _success.value = null
             
             try {
-                val key = apiKey.value
-                val url = baseUrl.value
-                
-                if (key.isBlank()) {
-                    _error.value = "请先设置API Key"
-                    return@launch
-                }
+                val key = apiKey.value.ifBlank { DEFAULT_API_KEY }
+                val url = baseUrl.value.ifBlank { DEFAULT_BASE_URL }
                 
                 val service = DeepSeekService(key, url)
                 val result = service.chat(
