@@ -1,5 +1,6 @@
 package com.bihe.app.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -48,47 +49,61 @@ fun SettingsScreen() {
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 // API Key
-                ListItem(
-                    headlineContent = { Text("API Key") },
-                    supportingContent = { 
-                        Text(if (apiKey.isNotBlank()) "${apiKey.take(8)}...${apiKey.takeLast(4)}" else "未设置")
-                    },
-                    leadingContent = {
-                        Icon(Icons.Default.Key, contentDescription = null)
-                    },
-                    trailingContent = {
-                        IconButton(onClick = { showApiKeyDialog = true }) {
-                            Icon(Icons.Default.Edit, contentDescription = "编辑")
-                        }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showApiKeyDialog = true }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Key, contentDescription = null)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("API Key")
+                        Text(
+                            if (apiKey.isNotBlank()) "${apiKey.take(8)}...${apiKey.takeLast(4)}" else "未设置",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                )
+                    Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                }
                 
-                HorizontalDivider()
+                Divider()
                 
                 // API地址
-                ListItem(
-                    headlineContent = { Text("API地址") },
-                    supportingContent = { Text(baseUrl) },
-                    leadingContent = {
-                        Icon(Icons.Default.Cloud, contentDescription = null)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Cloud, contentDescription = null)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("API地址")
+                        Text(baseUrl, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                )
+                }
                 
-                HorizontalDivider()
+                Divider()
                 
                 // 模型
-                ListItem(
-                    headlineContent = { Text("模型") },
-                    supportingContent = { Text(model) },
-                    leadingContent = {
-                        Icon(Icons.Default.Psychology, contentDescription = null)
-                    },
-                    trailingContent = {
-                        IconButton(onClick = { showModelDialog = true }) {
-                            Icon(Icons.Default.Edit, contentDescription = "编辑")
-                        }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showModelDialog = true }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Psychology, contentDescription = null)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("模型")
+                        Text(model, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                )
+                    Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                }
             }
         }
         
@@ -105,34 +120,48 @@ fun SettingsScreen() {
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                ListItem(
-                    headlineContent = { Text("导出数据") },
-                    leadingContent = {
-                        Icon(Icons.Default.Download, contentDescription = null)
-                    },
-                    onClick = { viewModel.exportData() }
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.exportData() }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Download, contentDescription = null)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("导出数据")
+                }
                 
-                HorizontalDivider()
+                Divider()
                 
-                ListItem(
-                    headlineContent = { Text("导入数据") },
-                    leadingContent = {
-                        Icon(Icons.Default.Upload, contentDescription = null)
-                    },
-                    onClick = { viewModel.importData() }
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.importData() }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Upload, contentDescription = null)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("导入数据")
+                }
                 
-                HorizontalDivider()
+                Divider()
                 
-                ListItem(
-                    headlineContent = { Text("清除所有数据") },
-                    leadingContent = {
-                        Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                    },
-                    supportingContent = { Text("此操作不可恢复", color = MaterialTheme.colorScheme.error) },
-                    onClick = { viewModel.clearAllData() }
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.clearAllData() }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text("清除所有数据", color = MaterialTheme.colorScheme.error)
+                        Text("此操作不可恢复", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                }
             }
         }
         
@@ -151,34 +180,48 @@ fun SettingsScreen() {
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                ListItem(
-                    headlineContent = { Text("笔核") },
-                    supportingContent = { Text("版本 1.0.0") },
-                    leadingContent = {
-                        Icon(Icons.Default.Info, contentDescription = null)
-                    },
-                    onClick = { showAboutDialog = true }
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showAboutDialog = true }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Info, contentDescription = null)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text("笔核")
+                        Text("版本 1.0.0", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
                 
-                HorizontalDivider()
+                Divider()
                 
-                ListItem(
-                    headlineContent = { Text("检查更新") },
-                    leadingContent = {
-                        Icon(Icons.Default.Update, contentDescription = null)
-                    },
-                    onClick = { viewModel.checkUpdate() }
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.checkUpdate() }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Update, contentDescription = null)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("检查更新")
+                }
                 
-                HorizontalDivider()
+                Divider()
                 
-                ListItem(
-                    headlineContent = { Text("反馈问题") },
-                    leadingContent = {
-                        Icon(Icons.Default.Feedback, contentDescription = null)
-                    },
-                    onClick = { viewModel.feedback() }
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.feedback() }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Feedback, contentDescription = null)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("反馈问题")
+                }
             }
         }
         

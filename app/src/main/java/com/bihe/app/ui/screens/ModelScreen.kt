@@ -64,7 +64,7 @@ fun ModelScreen() {
                     }
                 )
                 
-                HorizontalDivider()
+                Divider()
                 
                 // API地址
                 ListItem(
@@ -75,7 +75,7 @@ fun ModelScreen() {
                     }
                 )
                 
-                HorizontalDivider()
+                Divider()
                 
                 // 模型选择
                 ListItem(
@@ -131,7 +131,7 @@ fun ModelScreen() {
                     }
                 )
                 
-                HorizontalDivider()
+                Divider()
                 
                 ListItem(
                     headlineContent = { Text("模型路径") },

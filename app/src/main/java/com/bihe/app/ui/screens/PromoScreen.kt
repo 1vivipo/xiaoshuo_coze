@@ -58,7 +58,7 @@ fun PromoScreen() {
             )
         }
         
-        HorizontalDivider()
+        Divider()
         
         when {
             isLoading -> {

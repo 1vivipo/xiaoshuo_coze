@@ -59,7 +59,7 @@ fun DramaScreen() {
             )
         }
         
-        HorizontalDivider()
+        Divider()
         
         when {
             isLoading -> {
