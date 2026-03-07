@@ -7,17 +7,23 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bihe.app.ui.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen() {
-    var darkMode by remember { mutableStateOf(false) }
-    var autoSave by remember { mutableStateOf(true) }
-    var autoSaveInterval by remember { mutableIntStateOf(5) }
-    var passwordEnabled by remember { mutableStateOf(false) }
-    var powerSavingMode by remember { mutableStateOf(false) }
+    val viewModel: SettingsViewModel = viewModel()
+    val apiKey by viewModel.apiKey.collectAsState()
+    val baseUrl by viewModel.baseUrl.collectAsState()
+    val model by viewModel.model.collectAsState()
+    
+    var showApiKeyDialog by remember { mutableStateOf(false) }
+    var showModelDialog by remember { mutableStateOf(false) }
+    var showAboutDialog by remember { mutableStateOf(false) }
     
     Column(
         modifier = Modifier
@@ -28,189 +34,255 @@ fun SettingsScreen() {
             title = { Text("我的") }
         )
         
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        // API设置
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
-            // 用户信息
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text("笔核", style = MaterialTheme.typography.headlineSmall)
-                        Text("个人专属离线创作工具", style = MaterialTheme.typography.bodyMedium)
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "AI设置",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // API Key
+                ListItem(
+                    headlineContent = { Text("API Key") },
+                    supportingContent = { 
+                        Text(if (apiKey.isNotBlank()) "${apiKey.take(8)}...${apiKey.takeLast(4)}" else "未设置")
+                    },
+                    leadingContent = {
+                        Icon(Icons.Default.Key, contentDescription = null)
+                    },
+                    trailingContent = {
+                        IconButton(onClick = { showApiKeyDialog = true }) {
+                            Icon(Icons.Default.Edit, contentDescription = "编辑")
+                        }
                     }
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
+                )
+                
+                HorizontalDivider()
+                
+                // API地址
+                ListItem(
+                    headlineContent = { Text("API地址") },
+                    supportingContent = { Text(baseUrl) },
+                    leadingContent = {
+                        Icon(Icons.Default.Cloud, contentDescription = null)
+                    }
+                )
+                
+                HorizontalDivider()
+                
+                // 模型
+                ListItem(
+                    headlineContent = { Text("模型") },
+                    supportingContent = { Text(model) },
+                    leadingContent = {
+                        Icon(Icons.Default.Psychology, contentDescription = null)
+                    },
+                    trailingContent = {
+                        IconButton(onClick = { showModelDialog = true }) {
+                            Icon(Icons.Default.Edit, contentDescription = "编辑")
+                        }
+                    }
+                )
+            }
+        }
+        
+        // 数据管理
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "数据管理",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                ListItem(
+                    headlineContent = { Text("导出数据") },
+                    leadingContent = {
+                        Icon(Icons.Default.Download, contentDescription = null)
+                    },
+                    onClick = { viewModel.exportData() }
+                )
+                
+                HorizontalDivider()
+                
+                ListItem(
+                    headlineContent = { Text("导入数据") },
+                    leadingContent = {
+                        Icon(Icons.Default.Upload, contentDescription = null)
+                    },
+                    onClick = { viewModel.importData() }
+                )
+                
+                HorizontalDivider()
+                
+                ListItem(
+                    headlineContent = { Text("清除所有数据") },
+                    leadingContent = {
+                        Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                    },
+                    supportingContent = { Text("此操作不可恢复", color = MaterialTheme.colorScheme.error) },
+                    onClick = { viewModel.clearAllData() }
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // 关于
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "关于",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                ListItem(
+                    headlineContent = { Text("笔核") },
+                    supportingContent = { Text("版本 1.0.0") },
+                    leadingContent = {
+                        Icon(Icons.Default.Info, contentDescription = null)
+                    },
+                    onClick = { showAboutDialog = true }
+                )
+                
+                HorizontalDivider()
+                
+                ListItem(
+                    headlineContent = { Text("检查更新") },
+                    leadingContent = {
+                        Icon(Icons.Default.Update, contentDescription = null)
+                    },
+                    onClick = { viewModel.checkUpdate() }
+                )
+                
+                HorizontalDivider()
+                
+                ListItem(
+                    headlineContent = { Text("反馈问题") },
+                    leadingContent = {
+                        Icon(Icons.Default.Feedback, contentDescription = null)
+                    },
+                    onClick = { viewModel.feedback() }
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(32.dp))
+    }
+    
+    // API Key对话框
+    if (showApiKeyDialog) {
+        var newKey by remember { mutableStateOf(apiKey) }
+        AlertDialog(
+            onDismissRequest = { showApiKeyDialog = false },
+            title = { Text("设置API Key") },
+            text = {
+                Column {
+                    Text("请输入DeepSeek API Key", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newKey,
+                        onValueChange = { newKey = it },
+                        label = { Text("API Key") },
+                        placeholder = { Text("sk-xxxxx") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                }
-            }
-            
-            // 外观设置
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("外观设置", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                            Icon(Icons.Default.DarkMode, contentDescription = null)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("深色模式")
-                        }
-                        Switch(
-                            checked = darkMode,
-                            onCheckedChange = { darkMode = it }
-                        )
-                    }
-                }
-            }
-            
-            // 编辑器设置
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("编辑器设置", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                            Icon(Icons.Default.Save, contentDescription = null)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("自动保存")
-                        }
-                        Switch(
-                            checked = autoSave,
-                            onCheckedChange = { autoSave = it }
-                        )
-                    }
-                    
-                    if (autoSave) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("保存间隔: $autoSaveInterval 分钟")
-                        Slider(
-                            value = autoSaveInterval.toFloat(),
-                            onValueChange = { autoSaveInterval = it.toInt() },
-                            valueRange = 1f..30f,
-                            steps = 28
-                        )
-                    }
-                }
-            }
-            
-            // 安全设置
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("安全设置", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                            Icon(Icons.Default.Lock, contentDescription = null)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("应用密码锁")
-                        }
-                        Switch(
-                            checked = passwordEnabled,
-                            onCheckedChange = { passwordEnabled = it }
-                        )
-                    }
-                    
                     Spacer(modifier = Modifier.height(8.dp))
-                    
-                    OutlinedButton(
-                        onClick = { /* 备份 */ },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Backup, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("备份所有项目")
-                    }
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    OutlinedButton(
-                        onClick = { /* 恢复 */ },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Restore, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("恢复备份")
-                    }
-                }
-            }
-            
-            // 性能设置
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("性能设置", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                            Icon(Icons.Default.BatterySaver, contentDescription = null)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("省电模式")
-                        }
-                        Switch(
-                            checked = powerSavingMode,
-                            onCheckedChange = { powerSavingMode = it }
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    OutlinedButton(
-                        onClick = { /* 清理缓存 */ },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.CleaningServices, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("清理缓存")
-                    }
-                }
-            }
-            
-            // 关于
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("关于", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("版本")
-                        Text("1.0.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
                     Text(
-                        "笔核是一款专为创作者设计的离线写作工具，支持AI辅助续写、漫剧制作、推文视频生成等功能。",
+                        "获取方式：访问 platform.deepseek.com 注册并创建API Key",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.updateApiKey(newKey)
+                    showApiKeyDialog = false
+                }) {
+                    Text("保存")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showApiKeyDialog = false }) {
+                    Text("取消")
+                }
             }
-        }
+        )
+    }
+    
+    // 模型选择对话框
+    if (showModelDialog) {
+        AlertDialog(
+            onDismissRequest = { showModelDialog = false },
+            title = { Text("选择模型") },
+            text = {
+                Column {
+                    val models = listOf("deepseek-chat", "deepseek-coder")
+                    models.forEach { m ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = model == m,
+                                onClick = { viewModel.updateModel(m) }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(m)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showModelDialog = false }) {
+                    Text("确定")
+                }
+            }
+        )
+    }
+    
+    // 关于对话框
+    if (showAboutDialog) {
+        AlertDialog(
+            onDismissRequest = { showAboutDialog = false },
+            title = { Text("关于笔核") },
+            text = {
+                Column {
+                    Text("笔核 v1.0.0")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("一款专业的AI辅助写作工具")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("功能特性：")
+                    Text("• 小说创作与AI续写")
+                    Text("• 漫剧剧本制作")
+                    Text("• 推文视频生成")
+                    Text("• 本地数据存储")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAboutDialog = false }) {
+                    Text("确定")
+                }
+            }
+        )
     }
 }

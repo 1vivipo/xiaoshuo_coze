@@ -12,8 +12,8 @@ import kotlinx.coroutines.launch
 class EditorViewModel : ViewModel() {
     
     private val database by lazy { BiHeApplication.instance.database }
+    private val settingsRepository by lazy { BiHeApplication.instance.settingsRepository }
     private var deepSeekService: DeepSeekService? = null
-    private var cachedApiKey: String = ""
     
     private val _project = MutableStateFlow<Project?>(null)
     val project: StateFlow<Project?> = _project
@@ -39,13 +39,27 @@ class EditorViewModel : ViewModel() {
     private val _content = MutableStateFlow("")
     val content: StateFlow<String> = _content
     
+    private var cachedApiKey: String = ""
+    private var cachedBaseUrl: String = "https://api.deepseek.com"
+    
     fun loadProject(projectId: Long, chapterId: Long? = null) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
+                // 加载设置
+                cachedApiKey = settingsRepository.apiKey.first()
+                cachedBaseUrl = settingsRepository.baseUrl.first()
+                
+                // 初始化DeepSeek服务
+                if (cachedApiKey.isNotBlank()) {
+                    deepSeekService = DeepSeekService(cachedApiKey, cachedBaseUrl)
+                }
+                
+                // 加载项目
                 val proj = database.projectDao().getProjectById(projectId)
                 _project.value = proj
                 
+                // 加载章节
                 val chapterList = database.chapterDao().getChaptersByProject(projectId).first()
                 _chapters.value = chapterList
                 
@@ -69,11 +83,6 @@ class EditorViewModel : ViewModel() {
                     _chapters.value = listOf(createdChapter)
                     _content.value = ""
                 }
-                
-                // 初始化DeepSeek服务
-                val apiKey = BiHeApplication.instance.settingsRepository.apiKey.first()
-                cachedApiKey = apiKey
-                deepSeekService = DeepSeekService(apiKey)
                 
                 _error.value = null
             } catch (e: Exception) {
@@ -145,14 +154,25 @@ class EditorViewModel : ViewModel() {
     }
     
     fun startAIWriting(currentContent: String) {
-        val chapter = _currentChapter.value ?: return
-        val proj = _project.value ?: return
-        val service = deepSeekService
+        val chapter = _currentChapter.value
+        val proj = _project.value
         
-        if (service == null) {
-            _error.value = "AI服务未初始化，请检查API Key设置"
+        if (proj == null) {
+            _error.value = "项目未加载"
             return
         }
+        
+        if (cachedApiKey.isBlank()) {
+            _error.value = "请先在「我的」页面设置API Key"
+            return
+        }
+        
+        // 确保服务已初始化
+        if (deepSeekService == null) {
+            deepSeekService = DeepSeekService(cachedApiKey, cachedBaseUrl)
+        }
+        
+        val service = deepSeekService!!
         
         viewModelScope.launch {
             _isWriting.value = true
@@ -160,15 +180,25 @@ class EditorViewModel : ViewModel() {
             _error.value = null
             
             try {
-                val characters = database.characterDao()
-                    .getCharactersByProject(proj.id)
-                    .first()
-                    .joinToString("\n") { "${it.name}：${it.description}" }
+                // 获取人物设定
+                val characters = try {
+                    database.characterDao()
+                        .getCharactersByProject(proj.id)
+                        .first()
+                        .joinToString("\n") { "${it.name}：${it.description}" }
+                } catch (e: Exception) {
+                    ""
+                }
                 
-                val worldSettings = database.worldSettingDao()
-                    .getWorldSettingsByProject(proj.id)
-                    .first()
-                    .joinToString("\n") { "${it.title}：${it.content}" }
+                // 获取世界观设定
+                val worldSettings = try {
+                    database.worldSettingDao()
+                        .getWorldSettingsByProject(proj.id)
+                        .first()
+                        .joinToString("\n") { "${it.title}：${it.content}" }
+                } catch (e: Exception) {
+                    ""
+                }
                 
                 var totalContent = currentContent
                 val targetWords = 2000
@@ -177,8 +207,8 @@ class EditorViewModel : ViewModel() {
                     _writingProgress.value = (totalContent.length.toFloat() / targetWords) * 100
                     
                     val result = service.continueWriting(
-                        context = totalContent.takeLast(2000),
-                        outline = chapter.outline,
+                        context = if (totalContent.isNotBlank()) totalContent.takeLast(2000) else "开始写作",
+                        outline = chapter?.outline ?: "",
                         characters = characters,
                         worldSetting = worldSettings,
                         targetWords = minOf(500, targetWords - totalContent.length)
@@ -186,7 +216,7 @@ class EditorViewModel : ViewModel() {
                     
                     result.fold(
                         onSuccess = { newContent ->
-                            totalContent += "\n$newContent"
+                            totalContent += if (totalContent.isNotBlank()) "\n$newContent" else newContent
                             _content.value = totalContent
                             updateContent(totalContent)
                         },
@@ -216,17 +246,11 @@ class EditorViewModel : ViewModel() {
         return cachedApiKey
     }
     
-    fun loadApiKey() {
-        viewModelScope.launch {
-            cachedApiKey = BiHeApplication.instance.settingsRepository.apiKey.first()
-        }
-    }
-    
     fun updateApiKey(key: String) {
         cachedApiKey = key
+        deepSeekService = DeepSeekService(key, cachedBaseUrl)
         viewModelScope.launch {
-            BiHeApplication.instance.settingsRepository.setApiKey(key)
-            deepSeekService = DeepSeekService(key)
+            settingsRepository.setApiKey(key)
         }
     }
     

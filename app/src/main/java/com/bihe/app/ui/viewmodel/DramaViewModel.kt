@@ -1,0 +1,207 @@
+package com.bihe.app.ui.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.bihe.app.BiHeApplication
+import com.bihe.app.data.model.DramaEpisode
+import com.bihe.app.data.model.EpisodeStatus
+import com.bihe.app.data.model.Project
+import com.bihe.app.data.model.ProjectType
+import com.bihe.app.domain.ai.DeepSeekService
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+
+class DramaViewModel : ViewModel() {
+    
+    private val database by lazy { BiHeApplication.instance.database }
+    private val settingsRepository by lazy { BiHeApplication.instance.settingsRepository }
+    
+    private val _episodes = MutableStateFlow<List<DramaEpisode>>(emptyList())
+    val episodes: StateFlow<List<DramaEpisode>> = _episodes
+    
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading
+    
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error
+    
+    private var currentProjectId: Long = 0
+    private var deepSeekService: DeepSeekService? = null
+    
+    init {
+        loadDramaProject()
+    }
+    
+    private fun loadDramaProject() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                // 查找或创建漫剧项目
+                val projects = database.projectDao().getAllProjects().first()
+                val dramaProject = projects.find { it.type == ProjectType.COMIC_DRAMA }
+                
+                if (dramaProject != null) {
+                    currentProjectId = dramaProject.id
+                    val episodeList = database.dramaDao().getEpisodesByProject(dramaProject.id).first()
+                    _episodes.value = episodeList
+                }
+                
+                // 初始化AI服务
+                val apiKey = settingsRepository.apiKey.first()
+                if (apiKey.isNotBlank()) {
+                    deepSeekService = DeepSeekService(apiKey)
+                }
+                
+            } catch (e: Exception) {
+                _error.value = "加载失败: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+    
+    fun createDramaProject(title: String, episodeCount: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                // 创建项目
+                val project = Project(
+                    name = title,
+                    type = ProjectType.COMIC_DRAMA,
+                    totalWordGoal = episodeCount * 800
+                )
+                val projectId = database.projectDao().insertProject(project)
+                currentProjectId = projectId
+                
+                // 创建剧集
+                val episodeList = (1..episodeCount).map { i ->
+                    DramaEpisode(
+                        projectId = projectId,
+                        episodeNumber = i,
+                        title = "第${i}集"
+                    )
+                }
+                
+                episodeList.forEach { episode ->
+                    database.dramaDao().insertEpisode(episode)
+                }
+                
+                // 重新加载
+                val savedEpisodes = database.dramaDao().getEpisodesByProject(projectId).first()
+                _episodes.value = savedEpisodes
+                
+            } catch (e: Exception) {
+                _error.value = "创建失败: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+    
+    fun generateScript(episode: DramaEpisode) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                if (deepSeekService == null) {
+                    val apiKey = settingsRepository.apiKey.first()
+                    if (apiKey.isBlank()) {
+                        _error.value = "请先设置API Key"
+                        return@launch
+                    }
+                    deepSeekService = DeepSeekService(apiKey)
+                }
+                
+                val result = deepSeekService!!.chat(
+                    messages = listOf(
+                        com.bihe.app.domain.ai.Message(
+                            role = "system",
+                            content = "你是一位专业的短剧编剧，擅长创作节奏紧凑、情感丰富的短剧剧本。"
+                        ),
+                        com.bihe.app.domain.ai.Message(
+                            role = "user",
+                            content = "请为第${episode.episodeNumber}集《${episode.title}》创作剧本，约800字，包含对话和场景描述。"
+                        )
+                    )
+                )
+                
+                result.fold(
+                    onSuccess = { script ->
+                        database.dramaDao().updateEpisode(
+                            episode.copy(
+                                script = script,
+                                status = EpisodeStatus.SCRIPT
+                            )
+                        )
+                        loadDramaProject()
+                    },
+                    onFailure = { e ->
+                        _error.value = "生成失败: ${e.message}"
+                    }
+                )
+                
+            } catch (e: Exception) {
+                _error.value = "生成失败: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+    
+    fun generateStoryboard(episode: DramaEpisode) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                if (episode.script.isBlank()) {
+                    _error.value = "请先生成剧本"
+                    return@launch
+                }
+                
+                // TODO: 生成分镜
+                database.dramaDao().updateEpisode(
+                    episode.copy(status = EpisodeStatus.STORYBOARD)
+                )
+                loadDramaProject()
+                
+            } catch (e: Exception) {
+                _error.value = "生成失败: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+    
+    fun generateAllScripts() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _episodes.value.forEach { episode ->
+                if (episode.script.isBlank()) {
+                    generateScript(episode)
+                }
+            }
+            _isLoading.value = false
+        }
+    }
+    
+    fun generateAllStoryboards() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _episodes.value.forEach { episode ->
+                if (episode.script.isNotBlank() && episode.status == EpisodeStatus.SCRIPT) {
+                    generateStoryboard(episode)
+                }
+            }
+            _isLoading.value = false
+        }
+    }
+    
+    fun deleteEpisode(episode: DramaEpisode) {
+        viewModelScope.launch {
+            database.dramaDao().deleteEpisode(episode)
+            loadDramaProject()
+        }
+    }
+    
+    fun clearError() {
+        _error.value = null
+    }
+}

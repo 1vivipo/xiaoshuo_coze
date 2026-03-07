@@ -1,8 +1,6 @@
 package com.bihe.app.ui.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -31,15 +29,30 @@ fun EditorScreen(
     val currentChapter by viewModel.currentChapter.collectAsState()
     val isWriting by viewModel.isWriting.collectAsState()
     val writingProgress by viewModel.writingProgress.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val content by viewModel.content.collectAsState()
     
     var showChapterList by remember { mutableStateOf(false) }
     var showNewChapterDialog by remember { mutableStateOf(false) }
     var showAISettings by remember { mutableStateOf(false) }
+    var editText by remember { mutableStateOf("") }
     
-    var content by remember(currentChapter?.content ?: "") { mutableStateOf(currentChapter?.content ?: "") }
-    
+    // 加载项目
     LaunchedEffect(projectId) {
         viewModel.loadProject(projectId, chapterId)
+    }
+    
+    // 同步内容
+    LaunchedEffect(content) {
+        editText = content
+    }
+    
+    // 显示错误
+    LaunchedEffect(error) {
+        error?.let {
+            // 可以显示Snackbar
+        }
     }
     
     Scaffold(
@@ -64,30 +77,84 @@ fun EditorScreen(
         floatingActionButton = {
             if (currentChapter != null && !isWriting) {
                 ExtendedFloatingActionButton(
-                    onClick = { viewModel.startAIWriting(content) },
+                    onClick = {
+                        if (viewModel.getApiKey().isBlank()) {
+                            showAISettings = true
+                        } else {
+                            viewModel.startAIWriting(editText)
+                        }
+                    },
                     icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
                     text = { Text("AI续写") }
                 )
             }
+            if (isWriting) {
+                ExtendedFloatingActionButton(
+                    onClick = { viewModel.stopWriting() },
+                    containerColor = MaterialTheme.colorScheme.error,
+                    icon = { Icon(Icons.Default.Stop, contentDescription = null) },
+                    text = { Text("停止") }
+                )
+            }
         }
     ) { paddingValues ->
-        Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            // 进度条
             if (isWriting) {
                 LinearProgressIndicator(
                     progress = writingProgress / 100f,
-                    modifier = Modifier.fillMaxWidth().padding(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                 )
                 Text(
                     text = "AI续写中... ${writingProgress.toInt()}%",
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(8.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
             
+            // 错误提示
+            error?.let { msg ->
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(msg, color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { viewModel.clearError() }) {
+                            Icon(Icons.Default.Close, contentDescription = "关闭")
+                        }
+                    }
+                }
+            }
+            
+            // 加载中
+            if (isLoading && !isWriting) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+            
+            // 编辑器
             BasicTextField(
-                value = content,
-                onValueChange = {
-                    content = it
+                value = editText,
+                onValueChange = { 
+                    editText = it
                     viewModel.updateContent(it)
                 },
                 modifier = Modifier
@@ -103,7 +170,7 @@ fun EditorScreen(
                 ),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 decorationBox = { innerTextField ->
-                    if (content.isEmpty()) {
+                    if (editText.isEmpty()) {
                         Text(
                             text = "开始写作...",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -114,62 +181,78 @@ fun EditorScreen(
                 }
             )
             
+            // 底部状态栏
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 tonalElevation = 2.dp
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("字数: ${content.length}")
-                    currentChapter?.let { Text("目标: ${it.wordCount}字") }
+                    Text("字数: ${editText.length}")
+                    currentChapter?.let { 
+                        Text("章节: ${it.title}")
+                    }
                 }
             }
         }
     }
     
+    // 章节列表
     if (showChapterList) {
         ModalBottomSheet(onDismissRequest = { showChapterList = false }) {
-            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
                 Text("章节列表", style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                LazyColumn {
-                    items(chapters) { chapter ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            onClick = {
-                                viewModel.selectChapter(chapter)
-                                showChapterList = false
-                            }
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(chapter.title)
-                                Text("${chapter.wordCount}字", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                chapters.forEach { chapter ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        onClick = {
+                            viewModel.selectChapter(chapter)
+                            showChapterList = false
                         }
-                    }
-                    
-                    item {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = { showNewChapterDialog = true },
-                            modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("新建章节")
+                            Text(chapter.title)
+                            Text(
+                                "${chapter.wordCount}字",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { showNewChapterDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("新建章节")
+                }
+                
+                Spacer(modifier = Modifier.height(32.dp))
             }
         }
     }
     
+    // 新建章节对话框
     if (showNewChapterDialog) {
         var newChapterTitle by remember { mutableStateOf("") }
         AlertDialog(
@@ -185,7 +268,7 @@ fun EditorScreen(
                 )
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         if (newChapterTitle.isNotBlank()) {
                             viewModel.createChapter(newChapterTitle)
@@ -204,34 +287,48 @@ fun EditorScreen(
         )
     }
     
+    // AI设置
     if (showAISettings) {
         var apiKey by remember { mutableStateOf(viewModel.getApiKey()) }
-        var targetWords by remember { mutableStateOf(2000) }
+        var baseUrl by remember { mutableStateOf("https://api.deepseek.com") }
         
         AlertDialog(
             onDismissRequest = { showAISettings = false },
             title = { Text("AI续写设置") },
             text = {
                 Column {
+                    Text(
+                        "请输入DeepSeek API Key",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
                     OutlinedTextField(
                         value = apiKey,
                         onValueChange = { apiKey = it },
                         label = { Text("API Key") },
+                        placeholder = { Text("sk-xxxxx") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("目标字数: $targetWords")
-                    Slider(
-                        value = targetWords.toFloat(),
-                        onValueChange = { targetWords = it.toInt() },
-                        valueRange = 500f..5000f,
-                        steps = 9
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = baseUrl,
+                        onValueChange = { baseUrl = it },
+                        label = { Text("API地址") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "获取API Key: platform.deepseek.com",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         viewModel.updateApiKey(apiKey)
                         showAISettings = false

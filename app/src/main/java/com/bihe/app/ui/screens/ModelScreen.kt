@@ -7,18 +7,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.bihe.app.ui.viewmodel.ModelViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModelScreen() {
-    var apiKey by remember { mutableStateOf("sk-632f27c66a4445e091a101b29da605f3") }
-    var baseUrl by remember { mutableStateOf("https://api.deepseek.com") }
-    var selectedModel by remember { mutableStateOf("deepseek-chat") }
-    var isOnlineMode by remember { mutableStateOf(true) }
-    var temperature by remember { mutableFloatStateOf(0.7f) }
-    var maxTokens by remember { mutableIntStateOf(4096) }
+    val viewModel: ModelViewModel = viewModel()
+    val apiKey by viewModel.apiKey.collectAsState()
+    val baseUrl by viewModel.baseUrl.collectAsState()
+    val model by viewModel.model.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+    
+    var showApiKeyDialog by remember { mutableStateOf(false) }
+    var showModelDialog by remember { mutableStateOf(false) }
     
     Column(
         modifier = Modifier
@@ -26,160 +32,243 @@ fun ModelScreen() {
             .verticalScroll(rememberScrollState())
     ) {
         TopAppBar(
-            title = { Text("模型配置") }
+            title = { Text("模型管理") }
         )
         
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        // 在线模型设置
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
-            // 模式切换
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("运行模式", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = isOnlineMode,
-                            onClick = { isOnlineMode = true },
-                            label = { Text("在线模式 (DeepSeek API)") }
-                        )
-                        FilterChip(
-                            selected = !isOnlineMode,
-                            onClick = { isOnlineMode = false },
-                            label = { Text("离线模式 (本地模型)") }
-                        )
-                    }
-                }
-            }
-            
-            // API配置
-            if (isOnlineMode) {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("DeepSeek API 配置", style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        OutlinedTextField(
-                            value = apiKey,
-                            onValueChange = { apiKey = it },
-                            label = { Text("API Key") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            trailingIcon = {
-                                IconButton(onClick = { /* 测试连接 */ }) {
-                                    Icon(Icons.Default.Check, contentDescription = "测试")
-                                }
-                            }
-                        )
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        OutlinedTextField(
-                            value = baseUrl,
-                            onValueChange = { baseUrl = it },
-                            label = { Text("Base URL") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        OutlinedTextField(
-                            value = selectedModel,
-                            onValueChange = { selectedModel = it },
-                            label = { Text("模型名称") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            } else {
-                // 离线模型配置
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("本地模型配置", style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        Button(
-                            onClick = { /* 导入模型 */ },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.FolderOpen, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("导入 GGUF 模型")
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "在线模型 (DeepSeek)",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // API Key
+                ListItem(
+                    headlineContent = { Text("API Key") },
+                    supportingContent = { 
+                        Text(if (apiKey.isNotBlank()) "${apiKey.take(8)}...${apiKey.takeLast(4)}" else "未设置")
+                    },
+                    leadingContent = {
+                        Icon(Icons.Default.Key, contentDescription = null)
+                    },
+                    trailingContent = {
+                        IconButton(onClick = { showApiKeyDialog = true }) {
+                            Icon(Icons.Default.Edit, contentDescription = "编辑")
                         }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Text(
-                            "支持导入 DeepSeek-R1、千问2 等量化模型",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
+                )
+                
+                HorizontalDivider()
+                
+                // API地址
+                ListItem(
+                    headlineContent = { Text("API地址") },
+                    supportingContent = { Text(baseUrl) },
+                    leadingContent = {
+                        Icon(Icons.Default.Cloud, contentDescription = null)
+                    }
+                )
+                
+                HorizontalDivider()
+                
+                // 模型选择
+                ListItem(
+                    headlineContent = { Text("模型") },
+                    supportingContent = { Text(model) },
+                    leadingContent = {
+                        Icon(Icons.Default.Psychology, contentDescription = null)
+                    },
+                    trailingContent = {
+                        IconButton(onClick = { showModelDialog = true }) {
+                            Icon(Icons.Default.Edit, contentDescription = "编辑")
+                        }
+                    }
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Button(
+                    onClick = { viewModel.testConnection() },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = apiKey.isNotBlank()
+                ) {
+                    Icon(Icons.Default.Wifi, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("测试连接")
                 }
             }
-            
-            // 生成参数
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("生成参数", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Text("Temperature: ${String.format("%.1f", temperature)}")
-                    Slider(
-                        value = temperature,
-                        onValueChange = { temperature = it },
-                        valueRange = 0f..2f,
-                        steps = 19
+        }
+        
+        // 本地模型
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "本地模型 (离线)",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                ListItem(
+                    headlineContent = { Text("GGUF模型") },
+                    supportingContent = { Text("未下载") },
+                    leadingContent = {
+                        Icon(Icons.Default.Storage, contentDescription = null)
+                    },
+                    trailingContent = {
+                        IconButton(onClick = { viewModel.downloadLocalModel() }) {
+                            Icon(Icons.Default.Download, contentDescription = "下载")
+                        }
+                    }
+                )
+                
+                HorizontalDivider()
+                
+                ListItem(
+                    headlineContent = { Text("模型路径") },
+                    supportingContent = { Text("/data/local/models/") },
+                    leadingContent = {
+                        Icon(Icons.Default.Folder, contentDescription = null)
+                    }
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // 使用说明
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "使用说明",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "1. 在线模型需要API Key，访问 platform.deepseek.com 获取\n" +
+                    "2. 本地模型可离线使用，但需要下载约2GB\n" +
+                    "3. 在线模型响应更快，本地模型隐私更好",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(32.dp))
+    }
+    
+    // API Key对话框
+    if (showApiKeyDialog) {
+        var newKey by remember { mutableStateOf(apiKey) }
+        var newUrl by remember { mutableStateOf(baseUrl) }
+        
+        AlertDialog(
+            onDismissRequest = { showApiKeyDialog = false },
+            title = { Text("设置API") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = newKey,
+                        onValueChange = { newKey = it },
+                        label = { Text("API Key") },
+                        placeholder = { Text("sk-xxxxx") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    
                     Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Text("Max Tokens: $maxTokens")
-                    Slider(
-                        value = maxTokens.toFloat(),
-                        onValueChange = { maxTokens = it.toInt() },
-                        valueRange = 512f..8192f,
-                        steps = 15
+                    OutlinedTextField(
+                        value = newUrl,
+                        onValueChange = { newUrl = it },
+                        label = { Text("API地址") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.updateApiKey(newKey)
+                    viewModel.updateBaseUrl(newUrl)
+                    showApiKeyDialog = false
+                }) {
+                    Text("保存")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showApiKeyDialog = false }) {
+                    Text("取消")
+                }
             }
-            
-            // Prompt模板
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Prompt 模板", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    val templates = listOf(
-                        "网文续写" to "NOVEL_CONTINUE",
-                        "剧本创作" to "SCRIPT_CREATE",
-                        "分镜生成" to "STORYBOARD_GEN",
-                        "润色优化" to "POLISH",
-                        "拆书仿写" to "ANALYZE_EMULATE"
-                    )
-                    
-                    templates.forEach { (name, _) ->
+        )
+    }
+    
+    // 模型选择对话框
+    if (showModelDialog) {
+        AlertDialog(
+            onDismissRequest = { showModelDialog = false },
+            title = { Text("选择模型") },
+            text = {
+                Column {
+                    val models = listOf("deepseek-chat", "deepseek-coder")
+                    models.forEach { m ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(name)
-                            IconButton(onClick = { /* 编辑模板 */ }) {
-                                Icon(Icons.Default.Edit, contentDescription = "编辑")
-                            }
+                            RadioButton(
+                                selected = model == m,
+                                onClick = { viewModel.updateModel(m) }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(m)
                         }
                     }
                 }
+            },
+            confirmButton = {
+                TextButton(onClick = { showModelDialog = false }) {
+                    Text("确定")
+                }
             }
+        )
+    }
+    
+    // 错误提示
+    error?.let { msg ->
+        Snackbar(
+            modifier = Modifier.padding(16.dp),
+            action = {
+                TextButton(onClick = { viewModel.clearError() }) {
+                    Text("关闭")
+                }
+            }
+        ) {
+            Text(msg)
+        }
+    }
+    
+    // 加载中
+    if (isLoading) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
         }
     }
 }
