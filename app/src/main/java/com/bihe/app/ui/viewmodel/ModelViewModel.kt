@@ -9,9 +9,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bihe.app.BiHeApplication
 import com.bihe.app.domain.ai.DeepSeekService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class ModelViewModel : ViewModel() {
@@ -20,10 +22,8 @@ class ModelViewModel : ViewModel() {
         private const val DEFAULT_API_KEY = "sk-632f27c66a4445e091a101b29da605f3"
         private const val DEFAULT_BASE_URL = "https://api.deepseek.com"
         
-        // 本地模型信息
         private const val LOCAL_MODEL_NAME = "Dirty-Muse-Writer-v01-Uncensored-Erotica-NSFW.Q2_K.gguf"
         private const val LOCAL_MODEL_URL = "https://huggingface.co/TheDrummer/Dark-Muse-Writer-v01-GGUF/resolve/main/Dirty-Muse-Writer-v01-Uncensored-Erotica-NSFW.Q2_K.gguf"
-        private const val LOCAL_MODEL_SIZE = 1500000000L // 约1.5GB
     }
     
     private val context by lazy { BiHeApplication.instance }
@@ -65,10 +65,10 @@ class ModelViewModel : ViewModel() {
                 val modelDir = File(context.filesDir, "models")
                 val modelFile = File(modelDir, LOCAL_MODEL_NAME)
                 
-                if (modelFile.exists() && modelFile.length() > 100000000) { // 大于100MB认为下载完成
-                    _localModelStatus.value = "downloaded"
+                _localModelStatus.value = if (modelFile.exists() && modelFile.length() > 100000000) {
+                    "downloaded"
                 } else {
-                    _localModelStatus.value = "not_downloaded"
+                    "not_downloaded"
                 }
             } catch (e: Exception) {
                 _localModelStatus.value = "not_downloaded"
@@ -83,13 +83,9 @@ class ModelViewModel : ViewModel() {
                 _downloadProgress.value = 0f
                 _error.value = null
                 
-                // 创建模型目录
                 val modelDir = File(context.filesDir, "models")
-                if (!modelDir.exists()) {
-                    modelDir.mkdirs()
-                }
+                if (!modelDir.exists()) modelDir.mkdirs()
                 
-                // 使用DownloadManager下载
                 val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                 
                 val request = DownloadManager.Request(Uri.parse(LOCAL_MODEL_URL))
@@ -101,8 +97,6 @@ class ModelViewModel : ViewModel() {
                     .setAllowedOverRoaming(true)
                 
                 downloadId = downloadManager.enqueue(request)
-                
-                // 监控下载进度
                 monitorDownload(downloadManager)
                 
             } catch (e: Exception) {
@@ -117,45 +111,47 @@ class ModelViewModel : ViewModel() {
             var downloading = true
             
             while (downloading) {
-                val query = DownloadManager.Query().setFilterById(downloadId)
-                val cursor: Cursor = downloadManager.query(query)
-                
-                if (cursor.moveToFirst()) {
-                    val bytesDownloadedIndex = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
-                    val bytesTotalIndex = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
-                    val statusIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                try {
+                    val query = DownloadManager.Query().setFilterById(downloadId)
+                    val cursor: Cursor = downloadManager.query(query)
                     
-                    if (bytesDownloadedIndex != -1 && bytesTotalIndex != -1) {
-                        val bytesDownloaded = cursor.getLong(bytesDownloadedIndex)
-                        val bytesTotal = cursor.getLong(bytesTotalIndex)
+                    if (cursor.moveToFirst()) {
+                        val bytesDownloadedIndex = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                        val bytesTotalIndex = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+                        val statusIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
                         
-                        if (bytesTotal > 0) {
-                            _downloadProgress.value = (bytesDownloaded * 100f / bytesTotal)
+                        if (bytesDownloadedIndex != -1 && bytesTotalIndex != -1) {
+                            val bytesDownloaded = cursor.getLong(bytesDownloadedIndex)
+                            val bytesTotal = cursor.getLong(bytesTotalIndex)
+                            
+                            if (bytesTotal > 0) {
+                                _downloadProgress.value = (bytesDownloaded * 100f / bytesTotal)
+                            }
+                        }
+                        
+                        if (statusIndex != -1) {
+                            when (cursor.getInt(statusIndex)) {
+                                DownloadManager.STATUS_SUCCESSFUL -> {
+                                    downloading = false
+                                    _downloadProgress.value = 100f
+                                    _localModelStatus.value = "downloaded"
+                                    _success.value = "模型下载完成！"
+                                    moveModelToAppDir()
+                                }
+                                DownloadManager.STATUS_FAILED -> {
+                                    downloading = false
+                                    _error.value = "下载失败"
+                                    _localModelStatus.value = "not_downloaded"
+                                }
+                            }
                         }
                     }
                     
-                    if (statusIndex != -1) {
-                        val status = cursor.getInt(statusIndex)
-                        when (status) {
-                            DownloadManager.STATUS_SUCCESSFUL -> {
-                                downloading = false
-                                _downloadProgress.value = 100f
-                                _localModelStatus.value = "downloaded"
-                                _success.value = "模型下载完成！"
-                                
-                                // 移动文件到应用目录
-                                moveModelToAppDir()
-                            }
-                            DownloadManager.STATUS_FAILED -> {
-                                downloading = false
-                                _error.value = "下载失败"
-                                _localModelStatus.value = "not_downloaded"
-                            }
-                        }
-                    }
+                    cursor.close()
+                } catch (e: Exception) {
+                    // 忽略查询错误
                 }
                 
-                cursor.close()
                 delay(500)
             }
         }
@@ -203,31 +199,38 @@ class ModelViewModel : ViewModel() {
             _success.value = null
             
             try {
-                val key = apiKey.value.ifBlank { DEFAULT_API_KEY }
-                val url = baseUrl.value.ifBlank { DEFAULT_BASE_URL }
-                
-                val service = DeepSeekService(key, url)
-                val result = service.chat(
-                    messages = listOf(
-                        com.bihe.app.domain.ai.Message(
-                            role = "user",
-                            content = "你好"
+                // 在IO线程执行网络请求
+                val result = withContext(Dispatchers.IO) {
+                    try {
+                        val key = apiKey.value.ifBlank { DEFAULT_API_KEY }
+                        val url = baseUrl.value.ifBlank { DEFAULT_BASE_URL }
+                        
+                        val service = DeepSeekService(key, url)
+                        service.chat(
+                            messages = listOf(
+                                com.bihe.app.domain.ai.Message(
+                                    role = "user",
+                                    content = "你好，请回复'测试成功'"
+                                )
+                            ),
+                            maxTokens = 20
                         )
-                    ),
-                    maxTokens = 10
-                )
+                    } catch (e: Exception) {
+                        Result.failure(e)
+                    }
+                }
                 
                 result.fold(
                     onSuccess = { response ->
-                        _success.value = "连接成功！模型响应: ${response.take(50)}"
+                        _success.value = "✅ 连接成功！响应: ${response.take(100)}"
                     },
                     onFailure = { e ->
-                        _error.value = "连接失败: ${e.message}"
+                        _error.value = "❌ 连接失败: ${e.message ?: "未知错误"}"
                     }
                 )
                 
             } catch (e: Exception) {
-                _error.value = "测试失败: ${e.message}"
+                _error.value = "❌ 测试异常: ${e.message ?: "未知错误"}"
             } finally {
                 _isLoading.value = false
             }

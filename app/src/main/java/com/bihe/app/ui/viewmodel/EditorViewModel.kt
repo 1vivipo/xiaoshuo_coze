@@ -6,8 +6,10 @@ import com.bihe.app.BiHeApplication
 import com.bihe.app.data.model.Chapter
 import com.bihe.app.data.model.Project
 import com.bihe.app.domain.ai.DeepSeekService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class EditorViewModel : ViewModel() {
     
@@ -48,7 +50,6 @@ class EditorViewModel : ViewModel() {
     private var cachedBaseUrl: String = DEFAULT_BASE_URL
     
     init {
-        // 立即初始化DeepSeek服务
         deepSeekService = DeepSeekService(cachedApiKey, cachedBaseUrl)
     }
     
@@ -56,20 +57,16 @@ class EditorViewModel : ViewModel() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                // 加载设置（使用默认值作为fallback）
                 cachedApiKey = settingsRepository.apiKey.first().ifBlank { DEFAULT_API_KEY }
                 cachedBaseUrl = settingsRepository.baseUrl.first().ifBlank { DEFAULT_BASE_URL }
                 
-                // 确保DeepSeek服务已初始化
                 if (deepSeekService == null) {
                     deepSeekService = DeepSeekService(cachedApiKey, cachedBaseUrl)
                 }
                 
-                // 加载项目
                 val proj = database.projectDao().getProjectById(projectId)
                 _project.value = proj
                 
-                // 加载章节
                 val chapterList = database.chapterDao().getChaptersByProject(projectId).first()
                 _chapters.value = chapterList
                 
@@ -81,7 +78,6 @@ class EditorViewModel : ViewModel() {
                     _currentChapter.value = chapterList.first()
                     _content.value = chapterList.first().content
                 } else {
-                    // 没有章节，创建第一章
                     val newChapter = Chapter(
                         projectId = projectId,
                         title = "第一章",
@@ -123,7 +119,6 @@ class EditorViewModel : ViewModel() {
                 )
                 database.projectDao().updateWordCount(chapter.projectId)
                 
-                // 更新当前章节引用
                 _currentChapter.value = chapter.copy(
                     content = newContent,
                     wordCount = newContent.length
@@ -172,7 +167,6 @@ class EditorViewModel : ViewModel() {
             return
         }
         
-        // 确保服务已初始化
         if (deepSeekService == null) {
             deepSeekService = DeepSeekService(cachedApiKey, cachedBaseUrl)
         }
@@ -185,7 +179,6 @@ class EditorViewModel : ViewModel() {
             _error.value = null
             
             try {
-                // 获取人物设定
                 val characters = try {
                     database.characterDao()
                         .getCharactersByProject(proj.id)
@@ -195,7 +188,6 @@ class EditorViewModel : ViewModel() {
                     ""
                 }
                 
-                // 获取世界观设定
                 val worldSettings = try {
                     database.worldSettingDao()
                         .getWorldSettingsByProject(proj.id)
@@ -206,24 +198,33 @@ class EditorViewModel : ViewModel() {
                 }
                 
                 var totalContent = currentContent
-                val targetWords = 2000
+                val targetWords = 1000 // 减少目标字数，加快响应
                 
                 while (totalContent.length < targetWords && _isWriting.value) {
                     _writingProgress.value = (totalContent.length.toFloat() / targetWords) * 100
                     
-                    val result = service.continueWriting(
-                        context = if (totalContent.isNotBlank()) totalContent.takeLast(2000) else "开始写作，请续写一个精彩的小说开头",
-                        outline = chapter?.outline ?: "",
-                        characters = characters,
-                        worldSetting = worldSettings,
-                        targetWords = minOf(500, targetWords - totalContent.length)
-                    )
+                    // 在IO线程执行网络请求
+                    val result = withContext(Dispatchers.IO) {
+                        service.continueWriting(
+                            context = if (totalContent.isNotBlank()) totalContent.takeLast(1500) else "请开始写一个精彩的小说开头，主角是一个普通人，突然获得了特殊能力。",
+                            outline = chapter?.outline ?: "",
+                            characters = characters,
+                            worldSetting = worldSettings,
+                            targetWords = 300
+                        )
+                    }
                     
                     result.fold(
                         onSuccess = { newContent ->
-                            totalContent += if (totalContent.isNotBlank()) "\n$newContent" else newContent
-                            _content.value = totalContent
-                            updateContent(totalContent)
+                            if (newContent.isNotBlank()) {
+                                totalContent += if (totalContent.isNotBlank()) "\n\n$newContent" else newContent
+                                _content.value = totalContent
+                                updateContent(totalContent)
+                            } else {
+                                _error.value = "AI返回空内容"
+                                _isWriting.value = false
+                                return@launch
+                            }
                         },
                         onFailure = { e ->
                             _error.value = "AI续写失败: ${e.message}"

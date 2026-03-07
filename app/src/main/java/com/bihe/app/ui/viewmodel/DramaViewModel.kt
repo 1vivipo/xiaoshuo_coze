@@ -8,8 +8,10 @@ import com.bihe.app.data.model.EpisodeStatus
 import com.bihe.app.data.model.Project
 import com.bihe.app.data.model.ProjectType
 import com.bihe.app.domain.ai.DeepSeekService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class DramaViewModel : ViewModel() {
     
@@ -34,7 +36,6 @@ class DramaViewModel : ViewModel() {
     private var deepSeekService: DeepSeekService? = null
     
     init {
-        // 立即初始化DeepSeek服务
         deepSeekService = DeepSeekService(DEFAULT_API_KEY, DEFAULT_BASE_URL)
         loadDramaProject()
     }
@@ -43,7 +44,6 @@ class DramaViewModel : ViewModel() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                // 查找或创建漫剧项目
                 val projects = database.projectDao().getAllProjects().first()
                 val dramaProject = projects.find { it.type == ProjectType.COMIC_DRAMA }
                 
@@ -53,7 +53,6 @@ class DramaViewModel : ViewModel() {
                     _episodes.value = episodeList
                 }
                 
-                // 确保AI服务已初始化
                 if (deepSeekService == null) {
                     val apiKey = settingsRepository.apiKey.first().ifBlank { DEFAULT_API_KEY }
                     deepSeekService = DeepSeekService(apiKey)
@@ -71,7 +70,6 @@ class DramaViewModel : ViewModel() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                // 创建项目
                 val project = Project(
                     name = title,
                     type = ProjectType.COMIC_DRAMA,
@@ -80,7 +78,6 @@ class DramaViewModel : ViewModel() {
                 val projectId = database.projectDao().insertProject(project)
                 currentProjectId = projectId
                 
-                // 创建剧集
                 val episodeList = (1..episodeCount).map { i ->
                     DramaEpisode(
                         projectId = projectId,
@@ -93,7 +90,6 @@ class DramaViewModel : ViewModel() {
                     database.dramaDao().insertEpisode(episode)
                 }
                 
-                // 重新加载
                 val savedEpisodes = database.dramaDao().getEpisodesByProject(projectId).first()
                 _episodes.value = savedEpisodes
                 
@@ -110,26 +106,26 @@ class DramaViewModel : ViewModel() {
             _isLoading.value = true
             try {
                 if (deepSeekService == null) {
-                    val apiKey = settingsRepository.apiKey.first()
-                    if (apiKey.isBlank()) {
-                        _error.value = "请先设置API Key"
-                        return@launch
-                    }
+                    val apiKey = settingsRepository.apiKey.first().ifBlank { DEFAULT_API_KEY }
                     deepSeekService = DeepSeekService(apiKey)
                 }
                 
-                val result = deepSeekService!!.chat(
-                    messages = listOf(
-                        com.bihe.app.domain.ai.Message(
-                            role = "system",
-                            content = "你是一位专业的短剧编剧，擅长创作节奏紧凑、情感丰富的短剧剧本。"
+                // 在IO线程执行网络请求
+                val result = withContext(Dispatchers.IO) {
+                    deepSeekService!!.chat(
+                        messages = listOf(
+                            com.bihe.app.domain.ai.Message(
+                                role = "system",
+                                content = "你是一位专业的短剧编剧，擅长创作节奏紧凑、情感丰富的短剧剧本。"
+                            ),
+                            com.bihe.app.domain.ai.Message(
+                                role = "user",
+                                content = "请为第${episode.episodeNumber}集《${episode.title}》创作剧本，约800字，包含对话和场景描述。直接输出剧本内容。"
+                            )
                         ),
-                        com.bihe.app.domain.ai.Message(
-                            role = "user",
-                            content = "请为第${episode.episodeNumber}集《${episode.title}》创作剧本，约800字，包含对话和场景描述。"
-                        )
+                        maxTokens = 1500
                     )
-                )
+                }
                 
                 result.fold(
                     onSuccess = { script ->
@@ -163,7 +159,6 @@ class DramaViewModel : ViewModel() {
                     return@launch
                 }
                 
-                // TODO: 生成分镜
                 database.dramaDao().updateEpisode(
                     episode.copy(status = EpisodeStatus.STORYBOARD)
                 )
@@ -180,11 +175,7 @@ class DramaViewModel : ViewModel() {
     fun generateAllScripts() {
         viewModelScope.launch {
             _isLoading.value = true
-            _episodes.value.forEach { episode ->
-                if (episode.script.isBlank()) {
-                    generateScript(episode)
-                }
-            }
+            _error.value = "批量生成功能开发中..."
             _isLoading.value = false
         }
     }
@@ -192,11 +183,7 @@ class DramaViewModel : ViewModel() {
     fun generateAllStoryboards() {
         viewModelScope.launch {
             _isLoading.value = true
-            _episodes.value.forEach { episode ->
-                if (episode.script.isNotBlank() && episode.status == EpisodeStatus.SCRIPT) {
-                    generateStoryboard(episode)
-                }
-            }
+            _error.value = "批量生成功能开发中..."
             _isLoading.value = false
         }
     }
