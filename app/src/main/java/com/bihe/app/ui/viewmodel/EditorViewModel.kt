@@ -29,70 +29,133 @@ class EditorViewModel : ViewModel() {
     private val _writingProgress = MutableStateFlow(0f)
     val writingProgress: StateFlow<Float> = _writingProgress
     
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading
+    
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error
+    
+    private val _content = MutableStateFlow("")
+    val content: StateFlow<String> = _content
+    
     fun loadProject(projectId: Long, chapterId: Long? = null) {
         viewModelScope.launch {
-            val proj = database.projectDao().getProjectById(projectId)
-            _project.value = proj
-            
-            val chapterList = database.chapterDao().getChaptersByProject(projectId).first()
-            _chapters.value = chapterList
-            
-            if (chapterId != null) {
-                val chapter = database.chapterDao().getChapterById(chapterId)
-                _currentChapter.value = chapter
-            } else if (chapterList.isNotEmpty()) {
-                _currentChapter.value = chapterList.first()
+            _isLoading.value = true
+            try {
+                val proj = database.projectDao().getProjectById(projectId)
+                _project.value = proj
+                
+                val chapterList = database.chapterDao().getChaptersByProject(projectId).first()
+                _chapters.value = chapterList
+                
+                if (chapterId != null) {
+                    val chapter = database.chapterDao().getChapterById(chapterId)
+                    _currentChapter.value = chapter
+                    _content.value = chapter?.content ?: ""
+                } else if (chapterList.isNotEmpty()) {
+                    _currentChapter.value = chapterList.first()
+                    _content.value = chapterList.first().content
+                } else {
+                    // 没有章节，创建第一章
+                    val newChapter = Chapter(
+                        projectId = projectId,
+                        title = "第一章",
+                        orderIndex = 1
+                    )
+                    val id = database.chapterDao().insertChapter(newChapter)
+                    val createdChapter = newChapter.copy(id = id)
+                    _currentChapter.value = createdChapter
+                    _chapters.value = listOf(createdChapter)
+                    _content.value = ""
+                }
+                
+                // 初始化DeepSeek服务
+                val apiKey = BiHeApplication.instance.settingsRepository.apiKey.first()
+                deepSeekService = DeepSeekService(apiKey)
+                
+                _error.value = null
+            } catch (e: Exception) {
+                _error.value = "加载失败: ${e.message}"
+            } finally {
+                _isLoading.value = false
             }
-            
-            val apiKey = BiHeApplication.instance.settingsRepository.apiKey.first()
-            deepSeekService = DeepSeekService(apiKey)
         }
     }
     
     fun selectChapter(chapter: Chapter) {
         _currentChapter.value = chapter
+        _content.value = chapter.content
     }
     
-    fun updateContent(content: String) {
+    fun updateContent(newContent: String) {
+        _content.value = newContent
+        
         val chapter = _currentChapter.value ?: return
         viewModelScope.launch {
-            database.chapterDao().updateChapter(
-                chapter.copy(
-                    content = content,
-                    wordCount = content.length,
-                    updatedAt = System.currentTimeMillis()
+            try {
+                database.chapterDao().updateChapter(
+                    chapter.copy(
+                        content = newContent,
+                        wordCount = newContent.length,
+                        updatedAt = System.currentTimeMillis()
+                    )
                 )
-            )
-            database.projectDao().updateWordCount(chapter.projectId)
+                database.projectDao().updateWordCount(chapter.projectId)
+                
+                // 更新当前章节引用
+                _currentChapter.value = chapter.copy(
+                    content = newContent,
+                    wordCount = newContent.length
+                )
+            } catch (e: Exception) {
+                _error.value = "保存失败: ${e.message}"
+            }
         }
     }
     
     fun createChapter(title: String) {
         val proj = _project.value ?: return
         viewModelScope.launch {
-            val maxOrder = database.chapterDao().getMaxOrderIndex(proj.id)
-            val chapter = Chapter(
-                projectId = proj.id,
-                title = title,
-                orderIndex = maxOrder + 1
-            )
-            val id = database.chapterDao().insertChapter(chapter)
-            val newChapter = chapter.copy(id = id)
-            _currentChapter.value = newChapter
-            
-            val chapterList = database.chapterDao().getChaptersByProject(proj.id).first()
-            _chapters.value = chapterList
+            _isLoading.value = true
+            try {
+                val maxOrder = database.chapterDao().getMaxOrderIndex(proj.id)
+                val chapter = Chapter(
+                    projectId = proj.id,
+                    title = title,
+                    orderIndex = maxOrder + 1
+                )
+                val id = database.chapterDao().insertChapter(chapter)
+                val newChapter = chapter.copy(id = id)
+                
+                _currentChapter.value = newChapter
+                _content.value = ""
+                
+                val chapterList = database.chapterDao().getChaptersByProject(proj.id).first()
+                _chapters.value = chapterList
+                
+                _error.value = null
+            } catch (e: Exception) {
+                _error.value = "创建章节失败: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
         }
     }
     
     fun startAIWriting(currentContent: String) {
         val chapter = _currentChapter.value ?: return
         val proj = _project.value ?: return
-        val service = deepSeekService ?: return
+        val service = deepSeekService
+        
+        if (service == null) {
+            _error.value = "AI服务未初始化，请检查API Key设置"
+            return
+        }
         
         viewModelScope.launch {
             _isWriting.value = true
             _writingProgress.value = 0f
+            _error.value = null
             
             try {
                 val characters = database.characterDao()
@@ -108,7 +171,7 @@ class EditorViewModel : ViewModel() {
                 var totalContent = currentContent
                 val targetWords = 2000
                 
-                while (totalContent.length < targetWords) {
+                while (totalContent.length < targetWords && _isWriting.value) {
                     _writingProgress.value = (totalContent.length.toFloat() / targetWords) * 100
                     
                     val result = service.continueWriting(
@@ -122,9 +185,11 @@ class EditorViewModel : ViewModel() {
                     result.fold(
                         onSuccess = { newContent ->
                             totalContent += "\n$newContent"
+                            _content.value = totalContent
                             updateContent(totalContent)
                         },
-                        onFailure = {
+                        onFailure = { e ->
+                            _error.value = "AI续写失败: ${e.message}"
                             _isWriting.value = false
                             return@launch
                         }
@@ -135,17 +200,20 @@ class EditorViewModel : ViewModel() {
                 _isWriting.value = false
                 
             } catch (e: Exception) {
+                _error.value = "续写出错: ${e.message}"
                 _isWriting.value = false
             }
         }
     }
     
+    fun stopWriting() {
+        _isWriting.value = false
+    }
+    
     fun getApiKey(): String {
-        var key = ""
-        viewModelScope.launch {
-            key = BiHeApplication.instance.settingsRepository.apiKey.first()
-        }
-        return key
+        return runCatching {
+            BiHeApplication.instance.settingsRepository.apiKey.first()
+        }.getOrElse { "" }
     }
     
     fun updateApiKey(key: String) {
@@ -153,5 +221,9 @@ class EditorViewModel : ViewModel() {
             BiHeApplication.instance.settingsRepository.setApiKey(key)
             deepSeekService = DeepSeekService(key)
         }
+    }
+    
+    fun clearError() {
+        _error.value = null
     }
 }
